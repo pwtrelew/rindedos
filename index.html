@@ -3,7 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- Color de la barra del navegador en Android (Naranja de la app) -->
+    <meta name="theme-color" content="#f97316">
     <title>Stock Rinde Dos</title>
+    
+    <!-- ENLACES PARA QUE SEA INSTALABLE (PWA) -->
+    <link rel="manifest" href="manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker registrado'))
+                    .catch(err => console.log('Error en Service Worker', err));
+            });
+        }
+    </script>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -27,7 +41,7 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Home, PlusCircle, MinusCircle, Search, LogOut, Edit2, X, MoveRight } from 'lucide-react';
+        import { Home, PlusCircle, MinusCircle, Search, LogOut, Edit2, X } from 'lucide-react';
         
         import { initializeApp } from 'firebase/app';
         import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
@@ -68,7 +82,6 @@
             const [datosStock, setDatosStock] = useState({ gondola: {}, deposito: {} });
             const mesActual = new Date().toISOString().slice(0, 7); 
             
-            // Estado para el modal de edición
             const [saborAEditar, setSaborAEditar] = useState(null);
 
             useEffect(() => {
@@ -94,7 +107,7 @@
                         <div className="w-full max-w-sm text-center">
                             <div className="bg-orange-500 text-white p-6 rounded-3xl shadow-xl mb-10">
                                 <h1 className="text-3xl font-black mb-2">Rinde Dos</h1>
-                                <p className="text-orange-100">Control de Stock Móvil</p>
+                                <p className="text-orange-100 font-medium">Control de Stock Móvil</p>
                             </div>
                             <h2 className="text-xl font-bold text-gray-700 mb-6">Selecciona una sucursal</h2>
                             <button onClick={() => { setSucursal('Diarco'); setVista('inicio'); }} className="w-full bg-white border-2 border-blue-500 text-blue-600 font-bold text-lg py-5 rounded-2xl mb-4 shadow-sm active:scale-95 transition-transform">Diarco</button>
@@ -133,32 +146,30 @@
                 };
 
                 return (
-                    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
-                        <div className="bg-white w-full max-w-md p-5 rounded-t-3xl sm:rounded-3xl shadow-xl max-h-[90vh] overflow-y-auto">
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center backdrop-blur-sm">
+                        <div className="bg-white w-full max-w-md p-5 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto transform transition-all">
                             <div className="flex justify-between items-center mb-6">
                                 <h2 className="text-xl font-black text-gray-800">Modificar {saborAEditar}</h2>
-                                <button onClick={() => setSaborAEditar(null)} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button>
+                                <button onClick={() => setSaborAEditar(null)} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><X size={20}/></button>
                             </div>
                             
-                            <p className="text-sm text-gray-500 mb-4 text-center">Escribe las cantidades finales que deben quedar en cada lugar (ideal para corregir o mover stock).</p>
+                            <p className="text-sm text-gray-500 mb-4 text-center">Ajusta los números para reflejar el stock real.</p>
 
-                            {/* Sección Góndola */}
                             <div className="bg-blue-50 p-4 rounded-2xl mb-4 border border-blue-100">
-                                <h3 className="font-bold text-blue-700 mb-3 flex items-center gap-2">📍 Queda en Góndola</h3>
+                                <h3 className="font-bold text-blue-700 mb-3 flex items-center gap-2">📍 Total en Góndola</h3>
                                 <div className="flex gap-2">
-                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Gr.</label><input type="number" min="0" value={editGondola.g} onChange={e => setEditGondola({...editGondola, g: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold"/></div>
-                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Ch.</label><input type="number" min="0" value={editGondola.c} onChange={e => setEditGondola({...editGondola, c: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold"/></div>
-                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Suel.</label><input type="number" min="0" value={editGondola.s} onChange={e => setEditGondola({...editGondola, s: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold"/></div>
+                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Gr.</label><input type="number" min="0" value={editGondola.g} onChange={e => setEditGondola({...editGondola, g: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/></div>
+                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Ch.</label><input type="number" min="0" value={editGondola.c} onChange={e => setEditGondola({...editGondola, c: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/></div>
+                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Suel.</label><input type="number" min="0" value={editGondola.s} onChange={e => setEditGondola({...editGondola, s: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/></div>
                                 </div>
                             </div>
 
-                            {/* Sección Depósito */}
                             <div className="bg-purple-50 p-4 rounded-2xl mb-6 border border-purple-100">
-                                <h3 className="font-bold text-purple-700 mb-3 flex items-center gap-2">📦 Queda en Depósito</h3>
+                                <h3 className="font-bold text-purple-700 mb-3 flex items-center gap-2">📦 Total en Depósito</h3>
                                 <div className="flex gap-2">
-                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Gr.</label><input type="number" min="0" value={editDeposito.g} onChange={e => setEditDeposito({...editDeposito, g: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold"/></div>
-                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Ch.</label><input type="number" min="0" value={editDeposito.c} onChange={e => setEditDeposito({...editDeposito, c: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold"/></div>
-                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Suel.</label><input type="number" min="0" value={editDeposito.s} onChange={e => setEditDeposito({...editDeposito, s: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold"/></div>
+                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Gr.</label><input type="number" min="0" value={editDeposito.g} onChange={e => setEditDeposito({...editDeposito, g: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"/></div>
+                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Ch.</label><input type="number" min="0" value={editDeposito.c} onChange={e => setEditDeposito({...editDeposito, c: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"/></div>
+                                    <div className="flex-1"><label className="text-[10px] uppercase font-bold text-gray-500 block">Suel.</label><input type="number" min="0" value={editDeposito.s} onChange={e => setEditDeposito({...editDeposito, s: parseInt(e.target.value)||0})} className="w-full p-2 border rounded-lg text-center font-bold outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"/></div>
                                 </div>
                             </div>
 
@@ -239,19 +250,26 @@
                 const [ubicacion, setUbicacion] = useState("gondola");
                 const [cantidades, setCantidades] = useState({ grandes: 0, chicas: 0, sueltos: 0 });
                 const [saborSeleccionado, setSaborSeleccionado] = useState(null);
+                const [error, setError] = useState("");
 
                 const saboresDisponibles = sucursal === 'Maxiconsumo' ? [...SABORES_BASE, ...SABORES_MAXI] : SABORES_BASE;
                 const saboresFiltrados = saboresDisponibles.filter(s => s.toLowerCase().includes(busqueda.toLowerCase()));
                 
-                // Obtener sabores ya cargados para sugerencias
                 const todosLosSaboresCargados = [...new Set([...Object.keys(datosStock.gondola || {}), ...Object.keys(datosStock.deposito || {})])];
                 const saboresActivos = todosLosSaboresCargados.filter(s => (datosStock.gondola[s] || 0) + (datosStock.deposito[s] || 0) > 0);
 
-
                 const guardarStock = async () => {
-                    if (!saborSeleccionado) return alert("Selecciona un sabor primero");
+                    setError("");
+                    if (!saborSeleccionado) {
+                        setError("Por favor, busca y selecciona un sabor.");
+                        return;
+                    }
+                    
                     const sobresNuevos = sobresDesdeCajas(cantidades.grandes, cantidades.chicas, cantidades.sueltos);
-                    if (sobresNuevos === 0) return alert("Ingresa una cantidad válida");
+                    if (sobresNuevos === 0) {
+                        setError("Ingresa al menos 1 caja o jugo suelto.");
+                        return;
+                    }
 
                     const cantidadActual = datosStock[ubicacion]?.[saborSeleccionado] || 0;
                     let nuevaCantidad = isSuma ? cantidadActual + sobresNuevos : cantidadActual - sobresNuevos;
@@ -269,7 +287,6 @@
                     setSaborSeleccionado(null);
                     setBusqueda("");
                     setCantidades({ grandes: 0, chicas: 0, sueltos: 0 });
-                    alert(`¡Stock ${isSuma ? 'agregado' : 'descontado'} con éxito!`);
                     setVista('inicio'); 
                 };
 
@@ -290,11 +307,10 @@
                             />
                         </div>
 
-                        {/* LISTA DE RESULTADOS DE BÚSQUEDA */}
                         {!saborSeleccionado && busqueda && (
                             <div className="bg-white rounded-xl shadow-lg border border-gray-100 max-h-60 overflow-y-auto mb-4">
                                 {saboresFiltrados.map(sabor => (
-                                    <button key={sabor} onClick={() => setSaborSeleccionado(sabor)} className="w-full text-left p-4 border-b last:border-b-0 hover:bg-gray-50 active:bg-gray-100 font-bold text-gray-700 flex justify-between items-center">
+                                    <button key={sabor} onClick={() => {setSaborSeleccionado(sabor); setError("");}} className="w-full text-left p-4 border-b last:border-b-0 hover:bg-gray-50 active:bg-gray-100 font-bold text-gray-700 flex justify-between items-center">
                                         {sabor} <PlusCircle size={16} className="text-gray-400"/>
                                     </button>
                                 ))}
@@ -302,17 +318,12 @@
                             </div>
                         )}
 
-                        {/* SUGERENCIAS DE SABORES YA CARGADOS (Solo aparece si no hay búsqueda y no hay selección) */}
                         {!saborSeleccionado && !busqueda && saboresActivos.length > 0 && (
                             <div className="mb-4">
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 ml-1">Sabores ya en stock</p>
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 ml-1">Tus Sabores Activos</p>
                                 <div className="flex flex-wrap gap-2">
                                     {saboresActivos.map(sabor => (
-                                        <button 
-                                            key={sabor} 
-                                            onClick={() => setSaborSeleccionado(sabor)}
-                                            className="bg-white border border-orange-200 text-orange-700 font-medium px-4 py-2 rounded-full shadow-sm hover:bg-orange-50 active:scale-95 transition-all text-sm"
-                                        >
+                                        <button key={sabor} onClick={() => {setSaborSeleccionado(sabor); setError("");}} className="bg-white border border-orange-200 text-orange-700 font-medium px-4 py-2 rounded-full shadow-sm hover:bg-orange-50 active:scale-95 transition-all text-sm">
                                             {sabor}
                                         </button>
                                     ))}
@@ -320,7 +331,6 @@
                             </div>
                         )}
 
-                        {/* PANEL DE CARGA DE NÚMEROS */}
                         {saborSeleccionado && (
                             <div className="bg-white p-5 rounded-3xl shadow-lg border border-gray-100 flex-1 flex flex-col mb-4">
                                 <div className="flex justify-between items-center mb-6 border-b pb-3">
@@ -329,8 +339,8 @@
                                 </div>
 
                                 <div className="flex bg-gray-100 p-1.5 rounded-2xl mb-6">
-                                    <button onClick={() => setUbicacion('gondola')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors ${ubicacion === 'gondola' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>Góndola</button>
-                                    <button onClick={() => setUbicacion('deposito')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors ${ubicacion === 'deposito' ? 'bg-white shadow text-purple-600' : 'text-gray-500'}`}>Depósito</button>
+                                    <button onClick={() => setUbicacion('gondola')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors ${ubicacion === 'gondola' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'}`}>Góndola</button>
+                                    <button onClick={() => setUbicacion('deposito')} className={`flex-1 py-3 rounded-xl font-bold text-sm transition-colors ${ubicacion === 'deposito' ? 'bg-white shadow-sm text-purple-600' : 'text-gray-500'}`}>Depósito</button>
                                 </div>
 
                                 <div className="space-y-3 mb-8 flex-1">
@@ -347,6 +357,8 @@
                                         <input type="number" min="0" value={cantidades.sueltos || ''} onChange={(e) => setCantidades({...cantidades, sueltos: parseInt(e.target.value) || 0})} className="w-24 p-2.5 text-center font-bold text-lg border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none" placeholder="0" />
                                     </div>
                                 </div>
+                                
+                                {error && <p className="text-red-500 text-sm font-bold text-center mb-4">{error}</p>}
 
                                 <button onClick={guardarStock} className={`w-full py-4 rounded-2xl font-black text-white text-lg active:scale-95 transition-transform shadow-lg ${isSuma ? 'bg-green-500 shadow-green-200' : 'bg-red-500 shadow-red-200'}`}>
                                     {isSuma ? 'GUARDAR ENTRADA' : 'CONFIRMAR RESTA'}
