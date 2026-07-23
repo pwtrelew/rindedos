@@ -2,47 +2,42 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#f97316">
-    <title>Stock Rinde Dos</title>
-    
-    <link rel="manifest" href="./manifest.json">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rinde Dos - Stock</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel: Traduce React para que el navegador lo entienda sin node.js -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <style>
-        body { background-color: #f3f4f6; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(5px); }
-            to { opacity: 1; transform: translateY(0); }
+    
+    <!-- Import Maps para React y Firebase -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "https://esm.sh/react@18.2.0",
+          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+          "firebase/app": "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js",
+          "firebase/firestore": "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js",
+          "firebase/auth": "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js"
         }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type=number] { -moz-appearance: textfield; }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
-
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js').catch(err => {
-                    console.log('SW no registrado:', err);
-                });
-            });
-        }
+      }
     </script>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans">
+    <div id="root">
+        <div class="flex items-center justify-center h-screen">
+            <div class="text-xl font-bold text-orange-500 animate-pulse">Cargando Sistema Rinde Dos...</div>
+        </div>
+    </div>
 
+    <!-- Script principal usando Babel para JSX -->
     <script type="text/babel" data-type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import React, { useState, useEffect, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { initializeApp } from 'firebase/app';
+        import { getFirestore, collection, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+        import { getAuth, signInAnonymously } from 'firebase/auth';
 
-        // CONFIGURACIÓN EXACTA DE TU PROYECTO FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyDNwNcdzSxuL3q4C8_rL8CAEp3ypEuH-k4",
             authDomain: "rindedos-7f352.firebaseapp.com",
@@ -53,597 +48,405 @@
         };
 
         const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
         const db = getFirestore(app);
+        const auth = getAuth(app);
+        
+        // Iniciar sesión silenciosa obligatoria para Firebase
+        signInAnonymously(auth).catch(err => console.error("Error Auth:", err));
 
-        // CONSTANTES
-        const APP_ID = 'rindedos-app';
-        const { useState, useEffect } = React;
+        const SOBRES_POR_CAJA_CHICA = 10;
+        const CAJAS_CHICAS_POR_CAJA_GRANDE = 24;
+        const SOBRES_POR_CAJA_GRANDE = CAJAS_CHICAS_POR_CAJA_GRANDE * SOBRES_POR_CAJA_CHICA; // 240
 
-        const DEFAULT_SABORES = [
+        const SABORES_BASE = [
             "Naranja", "Naranja Durazno", "Naranja Mango", "Naranja Banana", 
             "Manzana", "Durazno", "Limón", "Frutilla", "Pera", "Ananá", 
             "Mix Frutal", "Pomelo Rosado", "Naranja 1+1", "Manzana 1+1", "Limón 1+1"
         ];
-        const SOBRES_POR_CAJA_CHICA = 10;
-        const CAJAS_CHICAS_POR_CAJA_GRANDE = 24;
-        const SOBRES_POR_CAJA_GRANDE = 240;
 
-        const IconBox = () => <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>;
-        const IconStore = ({size=18, className=""}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h2v-4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4h2a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/></svg>;
-        const IconWarehouse = ({size=18, className=""}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="12" height="12" x="6" y="10"/></svg>;
-        const IconSave = ({size=20}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
-        const IconTrash = ({size=16}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
-        const IconCalendar = ({size=18, className=""}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>;
-        const IconChart = ({size=18, className=""}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>;
-        const IconClipboard = ({size=18, className=""}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>;
-        const IconSettings = ({size=16, className=""}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
-        const IconX = ({size=24, className=""}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>;
-        const IconPlus = ({size=18}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
-        const IconChevronUp = ({className=""}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>;
-        const IconChevronDown = ({className=""}) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>;
-        const IconAlert = ({size=20}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
+        const SearchIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>;
+        const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
+        const MinusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/></svg>;
+        const SaveIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
 
         function App() {
-            const [sabores, setSabores] = useState(DEFAULT_SABORES);
-            const [isModalSaboresOpen, setIsModalSaboresOpen] = useState(false);
-            const [nuevoSabor, setNuevoSabor] = useState('');
-            const [activeTab, setActiveTab] = useState('registro'); 
+            const [sucursal, setSucursal] = useState(null);
+            const [pantalla, setPantalla] = useState('totales'); // totales, nuevo, modificar, historial
             const [registros, setRegistros] = useState([]);
-            const [mensaje, setMensaje] = useState({ text: '', type: '' });
-            const [isLoading, setIsLoading] = useState(true);
+            const [mensaje, setMensaje] = useState("");
 
-            // Cargar datos desde FIREBASE (Tiempo Real)
+            // Escuchar la base de datos de Firebase
             useEffect(() => {
-                let unsubscribeSabores;
-                let unsubscribeRegistros;
-
-                const initData = async () => {
-                    try {
-                        await signInAnonymously(auth);
-                        const user = auth.currentUser;
-                        if (!user) return;
-
-                        // Suscripción a Sabores
-                        unsubscribeSabores = onSnapshot(doc(db, 'artifacts', APP_ID, 'public', 'data', 'config', 'sabores'), docSnap => {
-                            if (docSnap.exists() && docSnap.data().lista) {
-                                setSabores(docSnap.data().lista);
-                            } else {
-                                setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'config', 'sabores'), { lista: DEFAULT_SABORES });
-                            }
-                        });
-
-                        // Suscripción a Registros
-                        unsubscribeRegistros = onSnapshot(collection(db, 'artifacts', APP_ID, 'public', 'data', 'registros'), snapshot => {
-                            const data = snapshot.docs.map(d => ({
-                                id: d.id,
-                                ...d.data()
-                            }));
-                            // Ordenamiento en memoria por fecha
-                            data.sort((a, b) => new Date(b.fechaHora) - new Date(a.fechaHora));
-                            setRegistros(data);
-                            setIsLoading(false);
-                        }, error => {
-                            console.error("Error al leer Firestore:", error);
-                            mostrarMensaje("Error conectando a la base de datos", "error");
-                            setIsLoading(false);
-                        });
-
-                    } catch (error) {
-                        console.error("Firebase auth/db error:", error);
-                        mostrarMensaje("Error de conexión con Firebase", "error");
-                        setIsLoading(false);
-                    }
-                };
-                
-                initData();
-
-                return () => {
-                    if (unsubscribeSabores) unsubscribeSabores();
-                    if (unsubscribeRegistros) unsubscribeRegistros();
-                };
+                const unsub = onSnapshot(collection(db, "movimientos_stock"), (snapshot) => {
+                    const datos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setRegistros(datos);
+                }, (error) => {
+                    console.error("Error cargando Firebase: ", error);
+                });
+                return () => unsub();
             }, []);
 
-            const mostrarMensaje = (texto, tipo = 'success') => {
-                setMensaje({ text: texto, type: tipo });
-                setTimeout(() => setMensaje({ text: '', type: '' }), 3000);
+            const mostrarMensaje = (texto) => {
+                setMensaje(texto);
+                setTimeout(() => setMensaje(""), 3000);
             };
 
-            const eliminarRegistro = async (id) => {
-                try {
-                    await deleteDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'registros', id));
-                    mostrarMensaje("Registro eliminado de la nube", "error");
-                } catch(e) {
-                    mostrarMensaje("Error al eliminar", "error");
-                }
-            };
+            if (!sucursal) {
+                return (
+                    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-orange-400 to-orange-600 p-4">
+                        <div className="bg-white p-10 rounded-2xl shadow-2xl text-center max-w-md w-full">
+                            <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+                                <span className="text-4xl">🥤</span>
+                            </div>
+                            <h1 className="text-3xl font-black text-gray-800 mb-2">Rinde Dos</h1>
+                            <p className="text-gray-500 mb-8 font-medium">Sistema de Gestión de Stock</p>
+                            
+                            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Selecciona tu sucursal</h2>
+                            <div className="space-y-4">
+                                <button 
+                                    onClick={() => setSucursal('Diarco')} 
+                                    className="w-full p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md transition-transform transform hover:scale-105"
+                                >
+                                    🏢 DIARCO
+                                </button>
+                                <button 
+                                    onClick={() => setSucursal('Maxiconsumo')} 
+                                    className="w-full p-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-md transition-transform transform hover:scale-105"
+                                >
+                                    🏪 MAXICONSUMO
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
 
-            const agregarSabor = async () => {
-                if (!nuevoSabor.trim()) return;
-                if (sabores.includes(nuevoSabor.trim())) {
-                    mostrarMensaje("El sabor ya existe", "error");
-                    return;
-                }
-                const nuevaLista = [...sabores, nuevoSabor.trim()];
-                try {
-                    await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'config', 'sabores'), { lista: nuevaLista });
-                    setNuevoSabor('');
-                    mostrarMensaje("Sabor guardado en la nube", "success");
-                } catch (e) {
-                    mostrarMensaje("Error al guardar sabor", "error");
-                }
-            };
-
-            const eliminarSabor = async (saborAEliminar) => {
-                const nuevaLista = sabores.filter(s => s !== saborAEliminar);
-                try {
-                    await setDoc(doc(db, 'artifacts', APP_ID, 'public', 'data', 'config', 'sabores'), { lista: nuevaLista });
-                    mostrarMensaje("Sabor eliminado de la nube", "error");
-                } catch (e) {
-                    mostrarMensaje("Error al eliminar", "error");
-                }
-            };
-
-            const FormularioRegistro = () => {
-                const mesActual = new Date().toISOString().slice(0, 7); 
-                const [mes, setMes] = useState(mesActual);
-                const [sucursal, setSucursal] = useState('Diarco');
+            const FormularioMovimiento = ({ isIngreso }) => {
+                const [busqueda, setBusqueda] = useState('');
+                const [saborSeleccionado, setSaborSeleccionado] = useState('');
                 const [ubicacion, setUbicacion] = useState('Góndola');
-                const [isCargaDesplegada, setIsCargaDesplegada] = useState(false);
-                
-                const [cantidades, setCantidades] = useState(() => {
-                    const init = {};
-                    sabores.forEach(sabor => init[sabor] = { grandes: '', chicas: '' });
-                    return init;
+                const [cajasGrandes, setCajasGrandes] = useState('');
+                const [cajasChicas, setCajasChicas] = useState('');
+                const [jugosSueltos, setJugosSueltos] = useState('');
+                const [mes, setMes] = useState(new Date().toISOString().slice(0, 7));
+
+                // Filtrar sabores: Diarco no ve 1+1
+                const saboresFiltrados = SABORES_BASE.filter(s => {
+                    const matchBusqueda = s.toLowerCase().includes(busqueda.toLowerCase());
+                    const matchSucursal = sucursal === 'Diarco' ? !s.includes('1+1') : true;
+                    return matchBusqueda && matchSucursal;
                 });
-
-                useEffect(() => {
-                    setCantidades(prev => {
-                        const nuevasCantidades = { ...prev };
-                        let huboCambio = false;
-                        sabores.forEach(sabor => {
-                            if (!nuevasCantidades[sabor]) {
-                                nuevasCantidades[sabor] = { grandes: '', chicas: '' };
-                                huboCambio = true;
-                            }
-                        });
-                        return huboCambio ? nuevasCantidades : prev;
-                    });
-                }, [sabores]);
-
-                const handleInput = (sabor, tipo, valor) => {
-                    if (valor !== '' && Number(valor) < 0) return;
-                    setCantidades(prev => ({
-                        ...prev,
-                        [sabor]: {
-                            ...(prev[sabor] || { grandes: '', chicas: '' }),
-                            [tipo]: valor
-                        }
-                    }));
-                };
-
-                const calcularTotalFila = (sabor) => {
-                    const g = parseInt(cantidades[sabor]?.grandes) || 0;
-                    const c = parseInt(cantidades[sabor]?.chicas) || 0;
-                    return (g * SOBRES_POR_CAJA_GRANDE) + (c * SOBRES_POR_CAJA_CHICA);
-                };
-
-                const saboresAMostrar = sabores.filter(sabor => {
-                    if (sucursal === 'Diarco' && sabor.includes('1+1')) return false;
-                    return true;
-                });
-
-                const calcularGranTotal = () => {
-                    return saboresAMostrar.reduce((total, sabor) => total + calcularTotalFila(sabor), 0);
-                };
-
-                const registrosFiltrados = registros.filter(r => r.mes === mes && r.sucursal === sucursal);
-                let totalGondolaActual = 0;
-                let totalDepositoActual = 0;
-                registrosFiltrados.forEach(r => {
-                    if (r.ubicacion === 'Góndola') totalGondolaActual += r.totalSobres;
-                    if (r.ubicacion === 'Depósito') totalDepositoActual += r.totalSobres;
-                });
-                const totalSucursalActual = totalGondolaActual + totalDepositoActual;
 
                 const handleGuardar = async () => {
-                    const totalIngresado = calcularGranTotal();
-                    if (totalIngresado === 0) {
-                        mostrarMensaje("Debes ingresar al menos una cantidad", "error");
+                    if (!saborSeleccionado) {
+                        mostrarMensaje("Selecciona un sabor primero.");
+                        return;
+                    }
+                    
+                    const g = parseInt(cajasGrandes) || 0;
+                    const c = parseInt(cajasChicas) || 0;
+                    const j = parseInt(jugosSueltos) || 0;
+                    
+                    const totalSobres = (g * SOBRES_POR_CAJA_GRANDE) + (c * SOBRES_POR_CAJA_CHICA) + j;
+                    
+                    if (totalSobres === 0) {
+                        mostrarMensaje("Ingresa al menos una cantidad.");
                         return;
                     }
 
-                    const datosLimpios = { ...cantidades };
-                    sabores.forEach(sabor => {
-                        if (!saboresAMostrar.includes(sabor)) {
-                            datosLimpios[sabor] = { grandes: '', chicas: '' };
-                        }
-                    });
-
-                    const nuevoRegistro = {
-                        fechaHora: new Date().toISOString(),
-                        mes: mes,
-                        sucursal: sucursal,
-                        ubicacion: ubicacion,
-                        datos: datosLimpios,
-                        totalSobres: totalIngresado
-                    };
-
-                    const reset = {};
-                    sabores.forEach(sabor => reset[sabor] = { grandes: '', chicas: '' });
-                    setCantidades(reset);
-                    setIsCargaDesplegada(false);
-
                     try {
-                        await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'registros'), nuevoRegistro);
-                        mostrarMensaje("¡Stock subido a la nube!", "success");
-                        setActiveTab('historial');
-                    } catch(e) {
-                        mostrarMensaje("Error al subir", "error");
+                        await addDoc(collection(db, "movimientos_stock"), {
+                            sucursal,
+                            ubicacion,
+                            sabor: saborSeleccionado,
+                            mes,
+                            tipo: isIngreso ? 'ingreso' : 'egreso',
+                            cajasGrandes: g,
+                            cajasChicas: c,
+                            jugosSueltos: j,
+                            totalSobres,
+                            fechaCreacion: serverTimestamp()
+                        });
+                        mostrarMensaje(`Stock ${isIngreso ? 'agregado' : 'restado'} con éxito.`);
+                        setCajasGrandes(''); setCajasChicas(''); setJugosSueltos(''); setBusqueda(''); setSaborSeleccionado('');
+                    } catch (error) {
+                        console.error(error);
+                        mostrarMensaje("Error al guardar en Firebase.");
                     }
                 };
 
                 return (
-                    <div className="bg-white rounded-xl shadow-md p-6 border border-orange-100 animate-fade-in">
-                        <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2 border-b pb-3">
-                            <IconClipboard className="text-orange-500" /> Nuevo Registro de Inventario
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 max-w-3xl animate-fade-in">
+                        <h2 className={`text-2xl font-bold mb-6 flex items-center gap-2 ${isIngreso ? 'text-green-600' : 'text-red-600'}`}>
+                            {isIngreso ? <PlusIcon/> : <MinusIcon/>}
+                            {isIngreso ? "Nuevo Ingreso de Stock" : "Restar / Modificar Stock"}
                         </h2>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 bg-gray-50 p-5 rounded-lg">
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                                    <IconCalendar className="text-blue-600" /> Mes a Registrar
-                                </label>
-                                <input type="month" value={mes} onChange={e => setMes(e.target.value)} className="w-full p-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"/>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <label className="block text-sm font-bold text-gray-700 mb-2">1. Mes de Registro</label>
+                                <input type="month" value={mes} onChange={e => setMes(e.target.value)} className="w-full p-2 border rounded-md" />
                             </div>
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                                    <IconStore className="text-blue-600" /> Sucursal
-                                </label>
-                                <select value={sucursal} onChange={e => setSucursal(e.target.value)} className="w-full p-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
-                                    <option value="Diarco">Diarco</option>
-                                    <option value="Maxiconsumo">Maxiconsumo</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                                    <IconWarehouse className="text-blue-600" /> Ubicación
-                                </label>
-                                <select value={ubicacion} onChange={e => setUbicacion(e.target.value)} className="w-full p-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none">
-                                    <option value="Góndola">Góndola</option>
-                                    <option value="Depósito">Depósito</option>
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <label className="block text-sm font-bold text-gray-700 mb-2">2. Ubicación física</label>
+                                <select value={ubicacion} onChange={e => setUbicacion(e.target.value)} className="w-full p-2 border rounded-md">
+                                    <option>Góndola</option>
+                                    <option>Depósito</option>
                                 </select>
                             </div>
                         </div>
 
-                        <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-5 mb-8 shadow-sm">
-                            <h3 className="text-sm font-bold text-gray-700 mb-4 uppercase tracking-wider flex items-center gap-2">
-                                <IconChart className="text-orange-500" /> 
-                                Inventario actual guardado para {sucursal} ({mes})
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="bg-white rounded-xl p-4 border border-blue-100 shadow-sm flex flex-col justify-center items-center">
-                                    <span className="text-gray-500 text-xs font-bold uppercase mb-1">Total en Góndola</span>
-                                    <span className="text-3xl font-black text-blue-600">{totalGondolaActual} <span className="text-sm font-normal text-gray-400">sobres</span></span>
+                        <div className="mb-6">
+                            <label className="block text-sm font-bold text-gray-700 mb-2">3. Buscar Sabor</label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                    <SearchIcon />
                                 </div>
-                                <div className="bg-white rounded-xl p-4 border border-indigo-100 shadow-sm flex flex-col justify-center items-center">
-                                    <span className="text-gray-500 text-xs font-bold uppercase mb-1">Total en Depósito</span>
-                                    <span className="text-3xl font-black text-indigo-600">{totalDepositoActual} <span className="text-sm font-normal text-gray-400">sobres</span></span>
-                                </div>
-                                <div className="bg-orange-500 rounded-xl p-4 border border-orange-600 shadow-md flex flex-col justify-center items-center text-white transform transition-transform hover:scale-105">
-                                    <span className="text-orange-100 text-xs font-bold uppercase mb-1">Gran Total {sucursal}</span>
-                                    <span className="text-3xl font-black">{totalSucursalActual} <span className="text-sm font-normal text-orange-200">sobres</span></span>
-                                </div>
+                                <input 
+                                    type="text" 
+                                    placeholder="Escribe para buscar (Ej: Naranja)"
+                                    value={busqueda}
+                                    onChange={e => setBusqueda(e.target.value)}
+                                    className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                                />
                             </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4 border-t border-gray-200 pt-6 mt-2">
-                            <button onClick={() => setIsCargaDesplegada(!isCargaDesplegada)} className="flex items-center gap-2 text-lg font-bold text-gray-800 hover:text-orange-600 transition-colors p-3 rounded-lg bg-gray-50 border border-gray-200 shadow-sm w-full sm:w-auto">
-                                {isCargaDesplegada ? <IconChevronUp className="text-orange-500" /> : <IconChevronDown className="text-orange-500" />}
-                                {isCargaDesplegada ? "Ocultar Carga de Cantidades" : "Desplegar Carga de Cantidades"}
-                            </button>
-                            <button onClick={() => setIsModalSaboresOpen(true)} className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm w-full sm:w-auto justify-center">
-                                <IconSettings /> Gestionar Sabores
-                            </button>
-                        </div>
-
-                        {isCargaDesplegada && (
-                            <div className="animate-fade-in">
-                                <div className="overflow-x-auto rounded-lg border border-gray-200">
-                                    <table className="w-full text-left border-collapse min-w-[600px]">
-                                        <thead>
-                                            <tr className="bg-gray-800 text-white">
-                                                <th className="p-3 font-semibold">Sabor</th>
-                                                <th className="p-3 font-semibold text-center border-l border-gray-600">Cajas Grandes<br/><span className="text-xs text-gray-400 font-normal">(x24 chicas)</span></th>
-                                                <th className="p-3 font-semibold text-center border-l border-gray-600">Cajas Chicas<br/><span className="text-xs text-gray-400 font-normal">(x10 sobres)</span></th>
-                                                <th className="p-3 font-semibold text-center bg-orange-600 border-l border-orange-500">Total en Sobres</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {saboresAMostrar.map((sabor, index) => {
-                                                const totalFila = calcularTotalFila(sabor);
-                                                return (
-                                                    <tr key={sabor} className={`border-b border-gray-100 hover:bg-orange-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                                                        <td className="p-3 font-medium text-gray-700">
-                                                            {sabor.includes('1+1') ? (
-                                                                <span className="flex items-center gap-2">{sabor} <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Línea 1+1</span></span>
-                                                            ) : (sabor)}
-                                                        </td>
-                                                        <td className="p-2 border-l border-gray-100 bg-blue-50/30">
-                                                            <input type="number" min="0" placeholder="0" value={cantidades[sabor]?.grandes ?? ''} onChange={e => handleInput(sabor, 'grandes', e.target.value)} className="w-full p-2 text-center bg-white border border-blue-200 rounded-md focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"/>
-                                                        </td>
-                                                        <td className="p-2 border-l border-gray-100 bg-orange-50/30">
-                                                            <input type="number" min="0" placeholder="0" value={cantidades[sabor]?.chicas ?? ''} onChange={e => handleInput(sabor, 'chicas', e.target.value)} className="w-full p-2 text-center bg-white border border-orange-200 rounded-md focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"/>
-                                                        </td>
-                                                        <td className="p-3 text-center border-l border-gray-100">
-                                                            <span className={`font-bold text-lg ${totalFila > 0 ? 'text-orange-600' : 'text-gray-400'}`}>{totalFila > 0 ? totalFila : '-'}</span>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                        <tfoot>
-                                            <tr className="bg-gray-100 border-t-2 border-gray-300">
-                                                <td colSpan="3" className="p-4 text-right font-bold text-gray-700 uppercase">Suma Total de Sobres (Ingreso Actual):</td>
-                                                <td className="p-4 text-center font-black text-2xl text-orange-600 bg-orange-100">{calcularGranTotal()}</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                                <div className="mt-6 flex justify-end">
-                                    <button onClick={handleGuardar} className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-8 py-3 rounded-lg font-bold shadow-md transition-all active:scale-95">
-                                        <IconSave /> Guardar Este Stock
+                            
+                            <div className="flex flex-wrap gap-2 mt-3 max-h-40 overflow-y-auto p-2 border border-dashed rounded-lg">
+                                {saboresFiltrados.map(sabor => (
+                                    <button 
+                                        key={sabor}
+                                        onClick={() => setSaborSeleccionado(sabor)}
+                                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${saborSeleccionado === sabor ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                    >
+                                        {sabor}
                                     </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {saborSeleccionado && (
+                            <div className="bg-orange-50 border border-orange-200 rounded-lg p-5 mb-6">
+                                <h3 className="font-bold text-orange-800 mb-4 border-b border-orange-200 pb-2">
+                                    4. Ingresar Cantidades para: <span className="text-2xl uppercase ml-2">{saborSeleccionado}</span>
+                                </h3>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">CAJAS GRANDES</label>
+                                        <input type="number" min="0" placeholder="0" value={cajasGrandes} onChange={e => setCajasGrandes(e.target.value)} className="w-full p-2 border border-orange-300 rounded focus:ring-2 focus:ring-orange-500 text-center text-lg font-bold" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">CAJAS CHICAS</label>
+                                        <input type="number" min="0" placeholder="0" value={cajasChicas} onChange={e => setCajasChicas(e.target.value)} className="w-full p-2 border border-orange-300 rounded focus:ring-2 focus:ring-orange-500 text-center text-lg font-bold" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-1">JUGOS SUELTOS</label>
+                                        <input type="number" min="0" placeholder="0" value={jugosSueltos} onChange={e => setJugosSueltos(e.target.value)} className="w-full p-2 border border-orange-300 rounded focus:ring-2 focus:ring-orange-500 text-center text-lg font-bold" />
+                                    </div>
                                 </div>
                             </div>
                         )}
+
+                        <button 
+                            onClick={handleGuardar}
+                            className={`w-full p-4 rounded-xl font-bold text-white shadow-lg flex items-center justify-center gap-2 ${isIngreso ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}
+                        >
+                            <SaveIcon />
+                            {isIngreso ? 'Guardar Nuevo Stock' : 'Confirmar Resta de Stock'}
+                        </button>
                     </div>
                 );
             };
 
-            const TotalesMensuales = () => {
-                const mesesDisponibles = [...new Set(registros.map(r => r.mes))].sort().reverse();
-                const [mesFiltro, setMesFiltro] = useState(mesesDisponibles[0] || '');
+            const calcularTotalesActuales = () => {
+                let totalGondolaSobres = 0;
+                let totalDepositoSobres = 0;
 
-                if (registros.length === 0) {
-                    return (
-                        <div className="text-center p-12 bg-white rounded-xl shadow-sm border border-gray-200">
-                            <div className="text-gray-300 flex justify-center mb-4"><IconChart size={48}/></div>
-                            <h3 className="text-xl font-medium text-gray-600">No hay datos para analizar</h3>
-                            <p className="text-gray-500 mt-2">Registra tu stock primero para ver los totales mensuales.</p>
-                        </div>
-                    );
-                }
+                // Solo calculamos sobre los registros de la sucursal actual
+                registros.filter(r => r.sucursal === sucursal).forEach(reg => {
+                    const multiplicador = reg.tipo === 'ingreso' ? 1 : -1;
+                    if (reg.ubicacion === 'Góndola') {
+                        totalGondolaSobres += (reg.totalSobres * multiplicador);
+                    } else if (reg.ubicacion === 'Depósito') {
+                        totalDepositoSobres += (reg.totalSobres * multiplicador);
+                    }
+                });
 
-                const calcularConsolidado = () => {
-                    const resumen = {};
-                    sabores.forEach(s => { resumen[s] = { diarcoG: 0, diarcoD: 0, maxiG: 0, maxiD: 0, totalGeneral: 0 }; });
-                    const registrosDelMes = registros.filter(r => r.mes === mesFiltro);
-                    registrosDelMes.forEach(reg => {
-                        sabores.forEach(sabor => {
-                            const c_grandes = parseInt(reg.datos[sabor]?.grandes) || 0;
-                            const c_chicas = parseInt(reg.datos[sabor]?.chicas) || 0;
-                            const totalSobres = (c_grandes * SOBRES_POR_CAJA_GRANDE) + (c_chicas * SOBRES_POR_CAJA_CHICA);
-                            if (totalSobres > 0) {
-                                if (reg.sucursal === 'Diarco' && reg.ubicacion === 'Góndola') resumen[sabor].diarcoG += totalSobres;
-                                if (reg.sucursal === 'Diarco' && reg.ubicacion === 'Depósito') resumen[sabor].diarcoD += totalSobres;
-                                if (reg.sucursal === 'Maxiconsumo' && reg.ubicacion === 'Góndola') resumen[sabor].maxiG += totalSobres;
-                                if (reg.sucursal === 'Maxiconsumo' && reg.ubicacion === 'Depósito') resumen[sabor].maxiD += totalSobres;
-                                resumen[sabor].totalGeneral += totalSobres;
-                            }
-                        });
-                    });
-                    return resumen;
+                // Función auxiliar para convertir sobres a la forma más legible (Cajas + Sobres)
+                const desglosar = (totalSobres) => {
+                    const grandes = Math.floor(totalSobres / SOBRES_POR_CAJA_GRANDE);
+                    let resto = totalSobres % SOBRES_POR_CAJA_GRANDE;
+                    const chicas = Math.floor(resto / SOBRES_POR_CAJA_CHICA);
+                    const sueltos = resto % SOBRES_POR_CAJA_CHICA;
+                    return { grandes, chicas, sueltos, totalAbsoluto: totalSobres };
                 };
 
-                const consolidado = calcularConsolidado();
-                const nombreMes = (mesStr) => {
-                    if (!mesStr) return '';
-                    const [y, m] = mesStr.split('-');
-                    return new Date(y, parseInt(m) - 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }).toUpperCase();
+                return {
+                    gondola: desglosar(totalGondolaSobres > 0 ? totalGondolaSobres : 0),
+                    deposito: desglosar(totalDepositoSobres > 0 ? totalDepositoSobres : 0),
+                    general: desglosar((totalGondolaSobres + totalDepositoSobres) > 0 ? (totalGondolaSobres + totalDepositoSobres) : 0)
                 };
-
-                return (
-                    <div className="bg-white rounded-xl shadow-md p-6 border border-orange-100 animate-fade-in">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4 border-b border-gray-200 pb-4">
-                            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                                <IconChart className="text-orange-500" /> Totales Consolidados
-                            </h2>
-                            <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                                <IconCalendar className="text-gray-500" />
-                                <select value={mesFiltro || mesesDisponibles[0]} onChange={e => setMesFiltro(e.target.value)} className="bg-transparent font-bold text-gray-700 outline-none">
-                                    {mesesDisponibles.map(m => <option key={m} value={m}>{nombreMes(m)}</option>)}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="overflow-x-auto rounded-lg border border-gray-300 shadow-sm">
-                            <table className="w-full text-center border-collapse text-sm min-w-[700px]">
-                                <thead>
-                                    <tr>
-                                        <th rowSpan="2" className="bg-gray-800 text-white p-3 font-semibold text-left border-r border-gray-600">Sabor Rinde Dos</th>
-                                        <th colSpan="2" className="bg-blue-600 text-white p-2 font-semibold border-b border-r border-blue-400">Diarco</th>
-                                        <th colSpan="2" className="bg-indigo-600 text-white p-2 font-semibold border-b border-indigo-400">Maxiconsumo</th>
-                                        <th rowSpan="2" className="bg-orange-500 text-white p-3 font-bold border-l border-orange-400 text-base">TOTAL MES<br/>(Sobres)</th>
-                                    </tr>
-                                    <tr>
-                                        <th className="bg-blue-50 text-blue-800 p-2 font-medium border-r border-gray-300">Góndola</th>
-                                        <th className="bg-blue-50 text-blue-800 p-2 font-medium border-r border-gray-300">Depósito</th>
-                                        <th className="bg-indigo-50 text-indigo-800 p-2 font-medium border-r border-gray-300">Góndola</th>
-                                        <th className="bg-indigo-50 text-indigo-800 p-2 font-medium">Depósito</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {sabores.map(sabor => {
-                                        const data = consolidado[sabor] || { diarcoG: 0, diarcoD: 0, maxiG: 0, maxiD: 0, totalGeneral: 0 };
-                                        const hasData = data.totalGeneral > 0;
-                                        return (
-                                            <tr key={sabor} className={`border-b border-gray-200 ${hasData ? 'hover:bg-orange-50' : 'bg-gray-50/50 text-gray-400'}`}>
-                                                <td className="p-3 text-left font-medium border-r border-gray-200">
-                                                    {sabor.includes('1+1') ? (
-                                                        <span className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">{sabor} <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider inline-block w-max">Línea 1+1</span></span>
-                                                    ) : (sabor)}
-                                                </td>
-                                                <td className="p-2 border-r border-gray-200">{data.diarcoG || '-'}</td>
-                                                <td className="p-2 border-r border-gray-200 bg-gray-50">{data.diarcoD || '-'}</td>
-                                                <td className="p-2 border-r border-gray-200">{data.maxiG || '-'}</td>
-                                                <td className="p-2 bg-gray-50">{data.maxiD || '-'}</td>
-                                                <td className={`p-3 border-l border-gray-200 font-bold ${hasData ? 'text-orange-600 bg-orange-50/50' : ''}`}>{data.totalGeneral || '-'}</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                                <tfoot>
-                                    <tr className="bg-gray-800 text-white font-bold text-base">
-                                        <td className="p-4 text-right border-r border-gray-600">SUMA TOTAL</td>
-                                        <td className="p-4 border-r border-gray-600">{sabores.reduce((sum, s) => sum + (consolidado[s]?.diarcoG || 0), 0) || '-'}</td>
-                                        <td className="p-4 border-r border-gray-600">{sabores.reduce((sum, s) => sum + (consolidado[s]?.diarcoD || 0), 0) || '-'}</td>
-                                        <td className="p-4 border-r border-gray-600">{sabores.reduce((sum, s) => sum + (consolidado[s]?.maxiG || 0), 0) || '-'}</td>
-                                        <td className="p-4 border-r border-gray-600">{sabores.reduce((sum, s) => sum + (consolidado[s]?.maxiD || 0), 0) || '-'}</td>
-                                        <td className="p-4 text-orange-300 text-xl">{sabores.reduce((sum, s) => sum + (consolidado[s]?.totalGeneral || 0), 0)}</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    </div>
-                );
             };
 
-            const HistorialRegistros = () => {
-                if (registros.length === 0) {
-                    return (
-                        <div className="text-center p-12 bg-white rounded-xl shadow-sm border border-gray-200">
-                            <div className="text-gray-300 flex justify-center mb-4"><IconClipboard size={48}/></div>
-                            <h3 className="text-xl font-medium text-gray-600">Aún no hay cargas</h3>
-                        </div>
-                    );
-                }
-                return (
-                    <div className="space-y-4 animate-fade-in">
-                        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                            <IconCalendar className="text-orange-500" /> Historial de Cargas Individuales
-                        </h2>
-                        {registros.map(reg => {
-                            const saboresCargados = Object.keys(reg.datos).filter(s => parseInt(reg.datos[s].grandes) > 0 || parseInt(reg.datos[s].chicas) > 0);
-                            return (
-                                <div key={reg.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row">
-                                    <div className="bg-gray-50 border-b md:border-b-0 md:border-r border-gray-200 p-4 w-full md:w-1/3 flex flex-col justify-center">
-                                        <div className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Mes: <span className="text-orange-600 font-bold bg-orange-100 px-2 py-0.5 rounded">{reg.mes}</span></div>
-                                        <div className="flex items-center gap-2 font-bold text-gray-800 mb-1"><IconStore className="text-blue-500" /> {reg.sucursal}</div>
-                                        <div className="flex items-center gap-2 text-gray-600 text-sm mb-4"><IconWarehouse className="text-indigo-500" /> {reg.ubicacion}</div>
-                                        <div className="text-xs text-gray-400">Fecha: {new Date(reg.fechaHora).toLocaleDateString('es-AR')} {new Date(reg.fechaHora).toLocaleTimeString('es-AR', {hour: '2-digit', minute:'2-digit'})}</div>
-                                    </div>
-                                    <div className="p-4 flex-1 flex flex-col justify-between">
-                                        <div>
-                                            <h4 className="text-sm font-semibold text-gray-500 mb-3 border-b pb-1">Detalle</h4>
-                                            <div className="flex flex-wrap gap-2 mb-4">
-                                                {saboresCargados.map(sabor => {
-                                                    const g = parseInt(reg.datos[sabor].grandes) || 0;
-                                                    const c = parseInt(reg.datos[sabor].chicas) || 0;
-                                                    const tot = (g * SOBRES_POR_CAJA_GRANDE) + (c * SOBRES_POR_CAJA_CHICA);
-                                                    return (
-                                                        <div key={sabor} className="bg-orange-50 border border-orange-100 rounded-md p-2 text-sm">
-                                                            <span className="font-semibold text-gray-800 block mb-1">{sabor}</span>
-                                                            <span className="text-xs text-gray-600">{g > 0 && `${g} Cj. Gr.`} {g > 0 && c > 0 && ' | '} {c > 0 && `${c} Cj. Ch.`}</span>
-                                                            <div className="text-orange-600 font-bold mt-1 text-right">{tot} sobres</div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                        <div className="flex justify-between items-center mt-2 pt-3 border-t border-gray-100">
-                                            <div className="flex items-center gap-2"><span className="text-sm text-gray-500">Total:</span><span className="text-xl font-black text-gray-800">{reg.totalSobres} sobres</span></div>
-                                            <button onClick={() => eliminarRegistro(reg.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-md transition-colors flex items-center gap-1 text-sm font-medium"><IconTrash /> Eliminar</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                );
-            };
+            const totales = calcularTotalesActuales();
 
             return (
-                <div className="min-h-screen bg-gray-100 font-sans text-gray-900 pb-12">
-                    {mensaje.text && (
-                        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white font-medium flex items-center gap-2 animate-fade-in ${mensaje.type === 'error' ? 'bg-red-500' : 'bg-green-500'}`}>
-                            {mensaje.type === 'error' && <IconAlert />}
-                            {mensaje.text}
+                <div className="flex h-screen bg-gray-100 overflow-hidden">
+                    {/* Alertas Flotantes */}
+                    {mensaje && (
+                        <div className="fixed top-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-2xl z-50 animate-bounce">
+                            {mensaje}
                         </div>
                     )}
 
-                    <header className="bg-orange-500 text-white shadow-md sticky top-0 z-40">
-                        <div className="max-w-6xl mx-auto px-4">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between py-4 gap-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-white p-2 rounded-xl text-orange-500 shadow-inner"><IconBox /></div>
-                                    <div>
-                                        <h1 className="text-2xl font-black tracking-tight leading-none">Stock Rinde Dos</h1>
-                                        <span className="text-xs font-bold bg-green-500 text-white px-2 py-0.5 rounded mt-1 inline-block">Conectado a la Nube</span>
-                                    </div>
-                                </div>
-                                <nav className="flex bg-orange-600 p-1 rounded-lg overflow-x-auto">
-                                    <button onClick={() => setActiveTab('registro')} className={`flex items-center gap-2 px-4 py-2 rounded-md font-semibold text-sm transition-all whitespace-nowrap ${activeTab === 'registro' ? 'bg-white text-orange-600 shadow-sm' : 'text-white hover:bg-orange-500'}`}><IconClipboard /> Nuevo Registro</button>
-                                    <button onClick={() => setActiveTab('totales')} className={`flex items-center gap-2 px-4 py-2 rounded-md font-semibold text-sm transition-all whitespace-nowrap ${activeTab === 'totales' ? 'bg-white text-orange-600 shadow-sm' : 'text-white hover:bg-orange-500'}`}><IconChart /> Totales</button>
-                                    <button onClick={() => setActiveTab('historial')} className={`flex items-center gap-2 px-4 py-2 rounded-md font-semibold text-sm transition-all whitespace-nowrap ${activeTab === 'historial' ? 'bg-white text-orange-600 shadow-sm' : 'text-white hover:bg-orange-500'}`}><IconCalendar /> Historial</button>
-                                </nav>
+                    {/* Menú Lateral */}
+                    <nav className="w-64 bg-gray-900 text-gray-300 flex flex-col shadow-2xl z-10">
+                        <div className="p-6 bg-gray-950 border-b border-gray-800">
+                            <h2 className="text-xs uppercase tracking-widest text-gray-500 mb-1">Sucursal Activa</h2>
+                            <div className="text-xl font-black text-white flex items-center gap-2">
+                                <span className="text-orange-500">📍</span> {sucursal}
                             </div>
                         </div>
-                    </header>
+                        
+                        <div className="p-4 flex flex-col gap-2 flex-1">
+                            <button onClick={() => setPantalla('totales')} className={`text-left px-4 py-3 rounded-lg transition-colors font-medium ${pantalla === 'totales' ? 'bg-orange-500 text-white' : 'hover:bg-gray-800 hover:text-white'}`}>📊 Resumen Principal</button>
+                            <button onClick={() => setPantalla('nuevo')} className={`text-left px-4 py-3 rounded-lg transition-colors font-medium ${pantalla === 'nuevo' ? 'bg-green-600 text-white' : 'hover:bg-gray-800 hover:text-white'}`}>➕ Nuevo Stock</button>
+                            <button onClick={() => setPantalla('modificar')} className={`text-left px-4 py-3 rounded-lg transition-colors font-medium ${pantalla === 'modificar' ? 'bg-red-600 text-white' : 'hover:bg-gray-800 hover:text-white'}`}>➖ Modificar Stock</button>
+                            <button onClick={() => setPantalla('historial')} className={`text-left px-4 py-3 rounded-lg transition-colors font-medium ${pantalla === 'historial' ? 'bg-blue-600 text-white' : 'hover:bg-gray-800 hover:text-white'}`}>📅 Totales por Mes</button>
+                        </div>
 
-                    <main className="max-w-6xl mx-auto px-4 mt-8">
-                        {isLoading ? (
-                            <div className="flex justify-center items-center py-20 text-orange-500">
-                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+                        <div className="p-4 border-t border-gray-800">
+                            <button onClick={() => setSucursal(null)} className="w-full text-left px-4 py-3 rounded-lg text-red-400 hover:bg-gray-800 hover:text-red-300 transition-colors flex items-center gap-2">
+                                🚪 Cambiar Sucursal
+                            </button>
+                        </div>
+                    </nav>
+
+                    {/* Contenido Dinámico */}
+                    <main className="flex-1 overflow-y-auto p-8">
+                        {pantalla === 'totales' && (
+                            <div className="animate-fade-in max-w-5xl">
+                                <h1 className="text-3xl font-black text-gray-800 mb-8 border-b pb-4">Inventario Actual Consolidado</h1>
+                                
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                                    {/* Panel Góndola */}
+                                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                                        <div className="bg-blue-600 p-4">
+                                            <h2 className="text-xl font-bold text-white text-center tracking-wide">📦 STOCK EN GÓNDOLA</h2>
+                                        </div>
+                                        <div className="p-6 grid grid-cols-3 gap-4 text-center divide-x divide-gray-100">
+                                            <div>
+                                                <div className="text-3xl font-black text-gray-800">{totales.gondola.grandes}</div>
+                                                <div className="text-xs font-bold text-gray-500 mt-1 uppercase">Cajas Grandes</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-3xl font-black text-gray-800">{totales.gondola.chicas}</div>
+                                                <div className="text-xs font-bold text-gray-500 mt-1 uppercase">Cajas Chicas</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-3xl font-black text-orange-500">{totales.gondola.sueltos}</div>
+                                                <div className="text-xs font-bold text-gray-500 mt-1 uppercase">Jugos Sueltos</div>
+                                            </div>
+                                        </div>
+                                        <div className="bg-gray-50 p-3 text-center border-t border-gray-100 text-sm text-gray-500 font-medium">
+                                            Total absoluto: {totales.gondola.totalAbsoluto} sobres
+                                        </div>
+                                    </div>
+
+                                    {/* Panel Depósito */}
+                                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                                        <div className="bg-indigo-600 p-4">
+                                            <h2 className="text-xl font-bold text-white text-center tracking-wide">🏢 STOCK EN DEPÓSITO</h2>
+                                        </div>
+                                        <div className="p-6 grid grid-cols-3 gap-4 text-center divide-x divide-gray-100">
+                                            <div>
+                                                <div className="text-3xl font-black text-gray-800">{totales.deposito.grandes}</div>
+                                                <div className="text-xs font-bold text-gray-500 mt-1 uppercase">Cajas Grandes</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-3xl font-black text-gray-800">{totales.deposito.chicas}</div>
+                                                <div className="text-xs font-bold text-gray-500 mt-1 uppercase">Cajas Chicas</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-3xl font-black text-orange-500">{totales.deposito.sueltos}</div>
+                                                <div className="text-xs font-bold text-gray-500 mt-1 uppercase">Jugos Sueltos</div>
+                                            </div>
+                                        </div>
+                                        <div className="bg-gray-50 p-3 text-center border-t border-gray-100 text-sm text-gray-500 font-medium">
+                                            Total absoluto: {totales.deposito.totalAbsoluto} sobres
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Gran Total */}
+                                <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl shadow-lg text-white p-8 text-center max-w-2xl mx-auto transform hover:scale-105 transition-transform">
+                                    <h2 className="text-sm font-bold uppercase tracking-widest text-orange-200 mb-2">Gran Total General (Ambas Ubicaciones)</h2>
+                                    <div className="text-6xl font-black mb-4">{totales.general.totalAbsoluto} <span className="text-2xl font-medium">sobres totales</span></div>
+                                    <div className="flex justify-center gap-6 text-sm bg-black/10 p-4 rounded-xl inline-flex font-medium">
+                                        <span>Equivale a:</span>
+                                        <span>📦 {totales.general.grandes} Cajas Grandes</span>
+                                        <span>+ 📦 {totales.general.chicas} Cajas Chicas</span>
+                                        <span>+ 🥤 {totales.general.sueltos} Sueltos</span>
+                                    </div>
+                                </div>
                             </div>
-                        ) : (
-                            <>
-                                {activeTab === 'registro' && <FormularioRegistro />}
-                                {activeTab === 'totales' && <TotalesMensuales />}
-                                {activeTab === 'historial' && <HistorialRegistros />}
-                            </>
+                        )}
+
+                        {pantalla === 'nuevo' && <FormularioMovimiento isIngreso={true} />}
+                        {pantalla === 'modificar' && <FormularioMovimiento isIngreso={false} />}
+                        
+                        {pantalla === 'historial' && (
+                            <div className="animate-fade-in bg-white rounded-xl shadow p-6 border border-gray-200">
+                                <h2 className="text-2xl font-bold mb-6 text-gray-800">Historial de Movimientos</h2>
+                                {registros.filter(r => r.sucursal === sucursal).length === 0 ? (
+                                    <p className="text-gray-500 text-center py-10">No hay movimientos registrados en esta sucursal.</p>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left">
+                                            <thead>
+                                                <tr className="bg-gray-100 text-gray-600 uppercase text-xs">
+                                                    <th className="p-3">Fecha</th>
+                                                    <th className="p-3">Mes Asignado</th>
+                                                    <th className="p-3">Ubicación</th>
+                                                    <th className="p-3">Sabor</th>
+                                                    <th className="p-3">Movimiento</th>
+                                                    <th className="p-3 text-right">Cant. Sobres</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {registros.filter(r => r.sucursal === sucursal).sort((a,b) => b.fechaCreacion - a.fechaCreacion).map(reg => (
+                                                    <tr key={reg.id} className="hover:bg-gray-50">
+                                                        <td className="p-3 text-sm text-gray-500">{reg.fechaCreacion?.toDate ? reg.fechaCreacion.toDate().toLocaleDateString() : 'Reciente'}</td>
+                                                        <td className="p-3 font-medium">{reg.mes}</td>
+                                                        <td className="p-3 text-gray-600">{reg.ubicacion}</td>
+                                                        <td className="p-3 font-bold text-gray-800">{reg.sabor}</td>
+                                                        <td className="p-3">
+                                                            <span className={`px-2 py-1 rounded text-xs font-bold ${reg.tipo === 'ingreso' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                                {reg.tipo === 'ingreso' ? '+ INGRESO' : '- EGRESO'}
+                                                            </span>
+                                                        </td>
+                                                        <td className={`p-3 text-right font-black ${reg.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}`}>
+                                                            {reg.tipo === 'ingreso' ? '+' : '-'}{reg.totalSobres}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </main>
-
-                    {isModalSaboresOpen && (
-                        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-                                <div className="bg-gray-100 p-4 border-b flex justify-between items-center">
-                                    <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2"><IconSettings /> Gestionar Sabores</h3>
-                                    <button onClick={() => setIsModalSaboresOpen(false)} className="text-gray-500 hover:text-red-500 p-1"><IconX /></button>
-                                </div>
-                                <div className="p-6 overflow-y-auto flex-1">
-                                    <div className="mb-6">
-                                        <label className="block text-sm font-bold text-gray-700 mb-2">Agregar nuevo sabor</label>
-                                        <div className="flex gap-2">
-                                            <input type="text" value={nuevoSabor} onChange={(e) => setNuevoSabor(e.target.value)} placeholder="Ej. Uva" className="flex-1 p-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" onKeyDown={(e) => e.key === 'Enter' && agregarSabor()}/>
-                                            <button onClick={agregarSabor} className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2"><IconPlus /> Agregar</button>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="text-sm font-bold text-gray-700 mb-3 border-b pb-2">Sabores Actuales</h4>
-                                        <div className="flex flex-wrap gap-2">
-                                            {sabores.map(sabor => (
-                                                <div key={sabor} className="bg-gray-100 border border-gray-200 rounded-full px-3 py-1.5 flex items-center gap-2 text-sm text-gray-700">
-                                                    <span>{sabor}</span>
-                                                    <button onClick={() => eliminarSabor(sabor)} className="text-gray-400 hover:text-red-500"><IconX size={14}/></button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
             );
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
+        const root = createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
+
+    <style>
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+    </style>
 </body>
 </html>
-```
-
-Ya está lista para que la copies, la subas a GitHub y entres desde el celular. En cuanto le des al botón **"Guardar este stock"**, tu teléfono se conectará directamente a tu propia base de datos (`rindedos-7f352`) y se guardará en la nube, manteniéndolo a salvo y listo para cuando vayas a la pestaña de reportes.
