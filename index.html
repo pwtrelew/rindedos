@@ -82,6 +82,11 @@
             const [configOpen, setConfigOpen] = useState(false);
             const [saboresActivos, setSaboresActivos] = useState([]);
 
+            // Estado para la edición rápida en Resumen General
+            const [editandoStock, setEditandoStock] = useState(null);
+            const [valGondola, setValGondola] = useState({ grandes: 0, chicas: 0, sueltos: 0 });
+            const [valDeposito, setValDeposito] = useState({ grandes: 0, chicas: 0, sueltos: 0 });
+
             const mesActual = new Date().toISOString().slice(0, 7); 
 
             useEffect(() => {
@@ -123,6 +128,37 @@
                     unsubSabores();
                 };
             }, [user, sucursal, mesActual]);
+
+            const iniciarEdicionStock = (sabor) => {
+                const cGondola = calcularCajas(datosStock.gondola[sabor] || 0);
+                const cDeposito = calcularCajas(datosStock.deposito[sabor] || 0);
+                setValGondola(cGondola);
+                setValDeposito(cDeposito);
+                setEditandoStock(sabor);
+            };
+
+            const guardarEdicionStock = async (sabor) => {
+                const totalG = sobresDesdeCajas(valGondola.grandes || 0, valGondola.chicas || 0, valGondola.sueltos || 0);
+                const totalD = sobresDesdeCajas(valDeposito.grandes || 0, valDeposito.chicas || 0, valDeposito.sueltos || 0);
+
+                const appId = "rindedos-app";
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
+                
+                const nuevoDocumento = {
+                    ...datosStock,
+                    gondola: {
+                        ...datosStock.gondola,
+                        [sabor]: totalG
+                    },
+                    deposito: {
+                        ...datosStock.deposito,
+                        [sabor]: totalD
+                    }
+                };
+
+                await setDoc(docRef, nuevoDocumento);
+                setEditandoStock(null);
+            };
 
             if (!sucursal) {
                 return (
@@ -290,10 +326,47 @@
                                 const cajasGondola = calcularCajas(cantGondola);
                                 const cajasDeposito = calcularCajas(cantDeposito);
 
+                                if (editandoStock === sabor) {
+                                    return (
+                                        <div key={sabor} className="bg-white p-4 rounded-2xl shadow-sm border-2 border-orange-400 mb-4">
+                                            <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-3">
+                                                <h3 className="font-bold text-gray-800 text-lg">Editando: {sabor}</h3>
+                                            </div>
+                                            
+                                            <div className="space-y-3 mb-4">
+                                                <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                                                    <span className="font-bold text-blue-700 block mb-2 text-sm">📍 Góndola</span>
+                                                    <div className="flex gap-2">
+                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">GRANDES</label><input type="number" min="0" value={valGondola.grandes || ''} onChange={e=>setValGondola({...valGondola, grandes: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-blue-500" placeholder="0"/></div>
+                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">CHICAS</label><input type="number" min="0" value={valGondola.chicas || ''} onChange={e=>setValGondola({...valGondola, chicas: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-blue-500" placeholder="0"/></div>
+                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">SUELTOS</label><input type="number" min="0" value={valGondola.sueltos || ''} onChange={e=>setValGondola({...valGondola, sueltos: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-blue-500" placeholder="0"/></div>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-purple-50 p-3 rounded-xl border border-purple-100">
+                                                    <span className="font-bold text-purple-700 block mb-2 text-sm">📦 Depósito</span>
+                                                    <div className="flex gap-2">
+                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">GRANDES</label><input type="number" min="0" value={valDeposito.grandes || ''} onChange={e=>setValDeposito({...valDeposito, grandes: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-purple-500" placeholder="0"/></div>
+                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">CHICAS</label><input type="number" min="0" value={valDeposito.chicas || ''} onChange={e=>setValDeposito({...valDeposito, chicas: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-purple-500" placeholder="0"/></div>
+                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">SUELTOS</label><input type="number" min="0" value={valDeposito.sueltos || ''} onChange={e=>setValDeposito({...valDeposito, sueltos: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-purple-500" placeholder="0"/></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setEditandoStock(null)} className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold active:scale-95 transition-transform"><X size={20} className="inline mr-1"/> Cancelar</button>
+                                                <button onClick={() => guardarEdicionStock(sabor)} className="flex-1 bg-green-500 text-white py-3 rounded-xl font-bold active:scale-95 transition-transform"><Check size={20} className="inline mr-1"/> Guardar</button>
+                                            </div>
+                                        </div>
+                                    );
+                                }
+
                                 return (
                                     <div key={sabor} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-4">
                                         <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-3">
                                             <h3 className="font-bold text-gray-800 text-lg">{sabor}: <span className="text-orange-600 ml-1">{total} un.</span></h3>
+                                            <button onClick={() => iniciarEdicionStock(sabor)} className="text-blue-500 p-2 bg-blue-50 rounded-lg active:bg-blue-100 transition-colors">
+                                                <Edit2 size={18}/>
+                                            </button>
                                         </div>
                                         
                                         <div className="flex gap-2 justify-center mb-4">
