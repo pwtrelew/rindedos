@@ -7,10 +7,10 @@
     
     <link rel="manifest" href="manifest.json">
     <script>
-        // Verificación de compatibilidad y protocolo para evitar errores en entornos de prueba
+        // Verificación segura para evitar errores en entornos de prueba o locales
         if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
             navigator.serviceWorker.register('sw.js').catch(err => {
-                console.log("Service Worker no se registró (entorno de prueba):", err);
+                console.log("Service Worker no se registró:", err);
             });
         }
     </script>
@@ -56,6 +56,7 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
+        // Sabores por defecto en caso de que no haya configuración en DB
         const SABORES_BASE = ["Naranja", "Manzana", "Pera", "Durazno", "Multifruta", "Limonada", "Frutilla"];
         const SABORES_MAXI = ["Naranja 1+1", "Manzana 1+1", "Limón 1+1"];
 
@@ -77,7 +78,7 @@
             const [vista, setVista] = useState('inicio'); 
             const [datosStock, setDatosStock] = useState({ gondola: {}, deposito: {} });
             
-            // Estados para Gestor de Sabores
+            // Estado principal para la lista de sabores
             const [configOpen, setConfigOpen] = useState(false);
             const [saboresActivos, setSaboresActivos] = useState([]);
 
@@ -94,7 +95,7 @@
 
                 const appId = "rindedos-app";
                 
-                // Carga de Stock
+                // 1. Escuchar los datos de Stock
                 const docRefStock = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
                 const unsubStock = onSnapshot(docRefStock, (docSnap) => {
                     if (docSnap.exists()) {
@@ -104,16 +105,16 @@
                     }
                 }, (error) => console.error("Error BD:", error));
 
-                // Carga de Sabores Personalizados
-                const docRefSabores = doc(db, 'artifacts', appId, 'public', 'config', `sabores_${sucursal}`);
+                // 2. Escuchar la configuración de Sabores personalizada por sucursal
+                const docRefSabores = doc(db, 'artifacts', appId, 'public', `config_sabores_${sucursal}`);
                 const unsubSabores = onSnapshot(docRefSabores, (docSnap) => {
                     if (docSnap.exists()) {
                         setSaboresActivos(docSnap.data().lista || []);
                     } else {
-                        // Asignar los por defecto si es la primera vez
+                        // Si no existe, inicializar con los valores por defecto
                         const defaults = sucursal === 'Maxiconsumo' ? [...SABORES_BASE, ...SABORES_MAXI] : [...SABORES_BASE];
                         setSaboresActivos(defaults);
-                        setDoc(docRefSabores, { lista: defaults });
+                        setDoc(docRefSabores, { lista: defaults }); // Guarda en DB
                     }
                 });
 
@@ -156,32 +157,47 @@
                 const [nuevoSabor, setNuevoSabor] = useState("");
                 const [editando, setEditando] = useState(null);
                 const [editValor, setEditValor] = useState("");
+                const [error, setError] = useState("");
 
                 const agregarSabor = async () => {
+                    setError("");
                     if (!nuevoSabor.trim()) return;
+                    if (saboresActivos.includes(nuevoSabor.trim())) {
+                        setError("Ese sabor ya existe.");
+                        return;
+                    }
+                    
                     const nuevaLista = [...saboresActivos, nuevoSabor.trim()];
-                    await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', 'config', `sabores_${sucursal}`), { lista: nuevaLista });
+                    await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', `config_sabores_${sucursal}`), { lista: nuevaLista });
                     setNuevoSabor("");
                 };
 
                 const eliminarSabor = async (sabor) => {
-                    // Solo lo quita de la lista visual, no rompe el stock
-                    const nuevaLista = saboresActivos.filter(s => s !== sabor);
-                    await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', 'config', `sabores_${sucursal}`), { lista: nuevaLista });
+                    const confirmacion = window.confirm(`¿Estás seguro de eliminar "${sabor}" de la lista?`);
+                    if (confirmacion) {
+                        const nuevaLista = saboresActivos.filter(s => s !== sabor);
+                        await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', `config_sabores_${sucursal}`), { lista: nuevaLista });
+                    }
                 };
 
                 const guardarEdicion = async (oldName) => {
+                    setError("");
                     const newName = editValor.trim();
                     if (!newName || newName === oldName) {
                         setEditando(null);
                         return;
                     }
 
-                    // Actualizamos la lista de sabores
-                    const nuevaLista = saboresActivos.map(s => s === oldName ? newName : s);
-                    await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', 'config', `sabores_${sucursal}`), { lista: nuevaLista });
+                    if (saboresActivos.includes(newName)) {
+                        setError("El nombre nuevo ya está en uso.");
+                        return;
+                    }
 
-                    // Migramos el stock del nombre viejo al nuevo en BD para no perder datos
+                    // 1. Actualiza la lista en configuración
+                    const nuevaLista = saboresActivos.map(s => s === oldName ? newName : s);
+                    await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', `config_sabores_${sucursal}`), { lista: nuevaLista });
+
+                    // 2. Migra el stock asociado en la base de datos
                     const g = datosStock.gondola[oldName];
                     const d = datosStock.deposito[oldName];
                     
@@ -210,10 +226,10 @@
                                 </button>
                             </div>
                             
-                            <div className="flex gap-2 mb-6">
+                            <div className="flex gap-2 mb-2">
                                 <input 
                                     value={nuevoSabor} 
-                                    onChange={e => setNuevoSabor(e.target.value)} 
+                                    onChange={e => {setNuevoSabor(e.target.value); setError("");}} 
                                     placeholder="Ej: Mix Frutal..." 
                                     className="flex-1 border-2 border-gray-200 rounded-xl p-3 bg-gray-50 focus:border-orange-500 outline-none font-medium" 
                                 />
@@ -221,8 +237,10 @@
                                     <PlusCircle size={24}/>
                                 </button>
                             </div>
+                            
+                            {error && <p className="text-red-500 text-sm font-bold mb-4">{error}</p>}
 
-                            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3">Sabores guardados</p>
+                            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3 mt-4">Sabores de {sucursal}</p>
                             
                             <div className="flex-1 overflow-y-auto space-y-2 pb-10">
                                 {saboresActivos.map(sabor => (
@@ -237,13 +255,14 @@
                                             <>
                                                 <span className="font-bold text-gray-700">{sabor}</span>
                                                 <div className="flex gap-2">
-                                                    <button onClick={()=>{setEditando(sabor); setEditValor(sabor);}} className="text-blue-500 p-2 bg-blue-50 rounded-lg active:bg-blue-100"><Edit2 size={18}/></button>
+                                                    <button onClick={()=>{setEditando(sabor); setEditValor(sabor); setError("");}} className="text-blue-500 p-2 bg-blue-50 rounded-lg active:bg-blue-100"><Edit2 size={18}/></button>
                                                     <button onClick={()=>eliminarSabor(sabor)} className="text-red-500 p-2 bg-red-50 rounded-lg active:bg-red-100"><Trash2 size={18}/></button>
                                                 </div>
                                             </>
                                         )}
                                     </div>
                                 ))}
+                                {saboresActivos.length === 0 && <p className="text-center text-gray-400 py-4">No hay sabores configurados.</p>}
                             </div>
                         </div>
                     </div>
@@ -343,14 +362,12 @@
                 const [ubicacion, setUbicacion] = useState("gondola");
                 const [cantidades, setCantidades] = useState({ grandes: 0, chicas: 0, sueltos: 0 });
                 const [saborSeleccionado, setSaborSeleccionado] = useState(null);
-                
-                // Sistema de alertas elegante en UI (sin usar alert() nativo)
                 const [mensajeUI, setMensajeUI] = useState(""); 
 
                 const saboresFiltrados = saboresActivos.filter(s => s.toLowerCase().includes(busqueda.toLowerCase()));
 
                 const guardarStock = async () => {
-                    setMensajeUI(""); // Limpiar errores
+                    setMensajeUI(""); 
 
                     if (!saborSeleccionado) {
                         setMensajeUI("Selecciona un sabor de la lista.");
@@ -385,7 +402,6 @@
                     setBusqueda("");
                     setCantidades({ grandes: 0, chicas: 0, sueltos: 0 });
                     
-                    // Volver al inicio tras guardar con exito
                     setVista('inicio'); 
                 };
 
