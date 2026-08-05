@@ -139,31 +139,32 @@
             const iniciarEdicionStock = (sabor) => {
                 const cGondola = normalizarViejosDatos(datosStock.gondola[sabor]);
                 const cDeposito = normalizarViejosDatos(datosStock.deposito[sabor]);
-                setValGondola(cGondola);
-                setValDeposito(cDeposito);
+                setValGondola({ grandes: cGondola.grandes, chicas: cGondola.chicas, sueltos: 0 }); // Limpiado sueltos
+                setValDeposito({ grandes: cDeposito.grandes, chicas: 0, sueltos: 0 }); // Depósito solo grandes
                 setEditandoStock(sabor);
             };
 
             const guardarEdicionStock = async (sabor) => {
-                let { grandes: gG, chicas: cG, sueltos: sG } = valGondola;
-                let { grandes: gD, chicas: cD, sueltos: sD } = valDeposito;
-
-                // Solo normalizamos los sueltos a chicas si pasan de 10, pero NUNCA redondeamos chicas a grandes
-                while (sG >= 10) { cG++; sG -= 10; }
-                while (sD >= 10) { cD++; sD -= 10; }
+                let { grandes: gG, chicas: cG } = valGondola;
+                let { grandes: gD } = valDeposito;
 
                 const appId = "rindedos-app";
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
                 
+                // Mantenemos los sueltos originales si los hubiera, pero no dejamos que el usuario los vea/edite
+                const sueltosGondolaOriginal = normalizarViejosDatos(datosStock.gondola[sabor]).sueltos;
+                const sueltosDepositoOriginal = normalizarViejosDatos(datosStock.deposito[sabor]).sueltos;
+                const chicasDepositoOriginal = normalizarViejosDatos(datosStock.deposito[sabor]).chicas; // Mantenemos chicas en depo si había
+
                 const nuevoDocumento = {
                     ...datosStock,
                     gondola: {
                         ...datosStock.gondola,
-                        [sabor]: { grandes: gG || 0, chicas: cG || 0, sueltos: sG || 0 }
+                        [sabor]: { grandes: gG || 0, chicas: cG || 0, sueltos: sueltosGondolaOriginal || 0 }
                     },
                     deposito: {
                         ...datosStock.deposito,
-                        [sabor]: { grandes: gD || 0, chicas: cD || 0, sueltos: sD || 0 }
+                        [sabor]: { grandes: gD || 0, chicas: chicasDepositoOriginal || 0, sueltos: sueltosDepositoOriginal || 0 }
                     }
                 };
 
@@ -202,7 +203,7 @@
 
             const ModalSabores = () => {
                 const [nuevoSabor, setNuevoSabor] = useState("");
-                const [editando, setEditando] = useState(null);
+                const [editandoSaborInfo, setEditandoSaborInfo] = useState(null); // Rename to avoid confusion with editandoStock
                 const [editValor, setEditValor] = useState("");
                 const [error, setError] = useState("");
 
@@ -215,6 +216,8 @@
                     }
                     
                     const nuevaLista = [...saboresActivos, nuevoSabor.trim()];
+                    // Actualizar el estado local inmediatamente para mejor UX
+                    setSaboresActivos(nuevaLista);
                     await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', `config_sabores_${sucursal}`), { lista: nuevaLista });
                     setNuevoSabor("");
                 };
@@ -223,15 +226,16 @@
                     const confirmacion = window.confirm(`¿Estás seguro de eliminar "${sabor}" de la lista?`);
                     if (confirmacion) {
                         const nuevaLista = saboresActivos.filter(s => s !== sabor);
+                        setSaboresActivos(nuevaLista);
                         await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', `config_sabores_${sucursal}`), { lista: nuevaLista });
                     }
                 };
 
-                const guardarEdicion = async (oldName) => {
+                const guardarEdicionSabor = async (oldName) => {
                     setError("");
                     const newName = editValor.trim();
                     if (!newName || newName === oldName) {
-                        setEditando(null);
+                        setEditandoSaborInfo(null);
                         return;
                     }
 
@@ -242,6 +246,7 @@
 
                     // 1. Actualiza la lista en configuración
                     const nuevaLista = saboresActivos.map(s => s === oldName ? newName : s);
+                    setSaboresActivos(nuevaLista); // Update local state
                     await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', `config_sabores_${sucursal}`), { lista: nuevaLista });
 
                     // 2. Migra el stock asociado en la base de datos
@@ -253,23 +258,12 @@
                         const nD = { ...datosStock.deposito };
                         
                         if (g !== undefined) { 
-                            const oldG = normalizarViejosDatos(g);
-                            const currentG = normalizarViejosDatos(nG[newName]);
-                            let sSueltos = oldG.sueltos + currentG.sueltos;
-                            let sChicas = oldG.chicas + currentG.chicas;
-                            let sGrandes = oldG.grandes + currentG.grandes;
-                            while (sSueltos >= 10) { sChicas++; sSueltos -= 10; }
-                            nG[newName] = { grandes: sGrandes, chicas: sChicas, sueltos: sSueltos };
+                            // Transferir los datos exactos que estaban
+                            nG[newName] = { ...g }; 
                             delete nG[oldName]; 
                         }
                         if (d !== undefined) { 
-                            const oldD = normalizarViejosDatos(d);
-                            const currentD = normalizarViejosDatos(nD[newName]);
-                            let sSueltos = oldD.sueltos + currentD.sueltos;
-                            let sChicas = oldD.chicas + currentD.chicas;
-                            let sGrandes = oldD.grandes + currentD.grandes;
-                            while (sSueltos >= 10) { sChicas++; sSueltos -= 10; }
-                            nD[newName] = { grandes: sGrandes, chicas: sChicas, sueltos: sSueltos };
+                            nD[newName] = { ...d }; 
                             delete nD[oldName]; 
                         }
                         
@@ -278,7 +272,7 @@
                         });
                     }
 
-                    setEditando(null);
+                    setEditandoSaborInfo(null);
                 };
 
                 return (
@@ -310,17 +304,17 @@
                             <div className="flex-1 overflow-y-auto space-y-2 pb-10">
                                 {saboresActivos.slice().sort((a, b) => a.localeCompare(b)).map(sabor => (
                                     <div key={sabor} className="flex justify-between items-center p-3 bg-white border-2 border-gray-100 rounded-xl shadow-sm">
-                                        {editando === sabor ? (
+                                        {editandoSaborInfo === sabor ? (
                                             <div className="flex flex-1 gap-2">
                                                 <input value={editValor} onChange={e=>setEditValor(e.target.value)} className="flex-1 border-2 border-orange-500 rounded-lg p-2 outline-none font-bold text-gray-700" />
-                                                <button onClick={()=>guardarEdicion(sabor)} className="text-white p-2 bg-green-500 rounded-lg active:scale-95"><Check size={18}/></button>
-                                                <button onClick={()=>setEditando(null)} className="text-gray-500 p-2 bg-gray-200 rounded-lg active:scale-95"><X size={18}/></button>
+                                                <button onClick={()=>guardarEdicionSabor(sabor)} className="text-white p-2 bg-green-500 rounded-lg active:scale-95"><Check size={18}/></button>
+                                                <button onClick={()=>setEditandoSaborInfo(null)} className="text-gray-500 p-2 bg-gray-200 rounded-lg active:scale-95"><X size={18}/></button>
                                             </div>
                                         ) : (
                                             <>
                                                 <span className="font-bold text-gray-700">{sabor}</span>
                                                 <div className="flex gap-2">
-                                                    <button onClick={()=>{setEditando(sabor); setEditValor(sabor); setError("");}} className="text-blue-500 p-2 bg-blue-50 rounded-lg active:bg-blue-100"><Edit2 size={18}/></button>
+                                                    <button onClick={()=>{setEditandoSaborInfo(sabor); setEditValor(sabor); setError("");}} className="text-blue-500 p-2 bg-blue-50 rounded-lg active:bg-blue-100"><Edit2 size={18}/></button>
                                                     <button onClick={()=>eliminarSabor(sabor)} className="text-red-500 p-2 bg-red-50 rounded-lg active:bg-red-100"><Trash2 size={18}/></button>
                                                 </div>
                                             </>
@@ -375,11 +369,11 @@
                                                     <div className="flex gap-2">
                                                         <div className="flex-1">
                                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Grandes</label>
-                                                            <input type="number" min="0" value={valGondola.grandes} onChange={e => setValGondola({...valGondola, grandes: parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" />
+                                                            <input type="number" min="0" value={valGondola.grandes === 0 && valGondola.grandes !== '0' ? '' : valGondola.grandes} onChange={e => setValGondola({...valGondola, grandes: e.target.value === '' ? '' : parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" placeholder="0" />
                                                         </div>
                                                         <div className="flex-1">
                                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Chicas</label>
-                                                            <input type="number" min="0" value={valGondola.chicas} onChange={e => setValGondola({...valGondola, chicas: parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" />
+                                                            <input type="number" min="0" value={valGondola.chicas === 0 && valGondola.chicas !== '0' ? '' : valGondola.chicas} onChange={e => setValGondola({...valGondola, chicas: e.target.value === '' ? '' : parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" placeholder="0" />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -389,7 +383,7 @@
                                                     <div className="flex gap-2">
                                                         <div className="flex-1">
                                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Grandes</label>
-                                                            <input type="number" min="0" value={valDeposito.grandes} onChange={e => setValDeposito({...valDeposito, grandes: parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" />
+                                                            <input type="number" min="0" value={valDeposito.grandes === 0 && valDeposito.grandes !== '0' ? '' : valDeposito.grandes} onChange={e => setValDeposito({...valDeposito, grandes: e.target.value === '' ? '' : parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" placeholder="0" />
                                                         </div>
                                                     </div>
                                                 </div>
