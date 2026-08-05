@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rinde-dos-v3';
+const CACHE_NAME = 'rinde-dos-v4';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
