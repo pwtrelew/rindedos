@@ -69,7 +69,14 @@
         };
 
         const sobresDesdeCajas = (grandes, chicas, sueltos) => {
-            return (grandes * 240) + (chicas * 10) + sueltos;
+            return ((grandes || 0) * 240) + ((chicas || 0) * 10) + (sueltos || 0);
+        };
+
+        const normalizarViejosDatos = (valor) => {
+            // Si el valor era el viejo formato (un solo número de sobres), lo transformamos.
+            if (typeof valor === 'number') return calcularCajas(valor);
+            // Si ya es un objeto (nuevo formato), lo respetamos tal cual.
+            return valor || { grandes: 0, chicas: 0, sueltos: 0 };
         };
 
         function App() {
@@ -130,16 +137,20 @@
             }, [user, sucursal, mesActual]);
 
             const iniciarEdicionStock = (sabor) => {
-                const cGondola = calcularCajas(datosStock.gondola[sabor] || 0);
-                const cDeposito = calcularCajas(datosStock.deposito[sabor] || 0);
+                const cGondola = normalizarViejosDatos(datosStock.gondola[sabor]);
+                const cDeposito = normalizarViejosDatos(datosStock.deposito[sabor]);
                 setValGondola(cGondola);
                 setValDeposito(cDeposito);
                 setEditandoStock(sabor);
             };
 
             const guardarEdicionStock = async (sabor) => {
-                const totalG = sobresDesdeCajas(valGondola.grandes || 0, valGondola.chicas || 0, valGondola.sueltos || 0);
-                const totalD = sobresDesdeCajas(valDeposito.grandes || 0, valDeposito.chicas || 0, valDeposito.sueltos || 0);
+                let { grandes: gG, chicas: cG, sueltos: sG } = valGondola;
+                let { grandes: gD, chicas: cD, sueltos: sD } = valDeposito;
+
+                // Solo normalizamos los sueltos a chicas si pasan de 10, pero NUNCA redondeamos chicas a grandes
+                while (sG >= 10) { cG++; sG -= 10; }
+                while (sD >= 10) { cD++; sD -= 10; }
 
                 const appId = "rindedos-app";
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
@@ -148,11 +159,11 @@
                     ...datosStock,
                     gondola: {
                         ...datosStock.gondola,
-                        [sabor]: totalG
+                        [sabor]: { grandes: gG || 0, chicas: cG || 0, sueltos: sG || 0 }
                     },
                     deposito: {
                         ...datosStock.deposito,
-                        [sabor]: totalD
+                        [sabor]: { grandes: gD || 0, chicas: cD || 0, sueltos: sD || 0 }
                     }
                 };
 
@@ -241,8 +252,26 @@
                         const nG = { ...datosStock.gondola };
                         const nD = { ...datosStock.deposito };
                         
-                        if (g !== undefined) { nG[newName] = (nG[newName] || 0) + g; delete nG[oldName]; }
-                        if (d !== undefined) { nD[newName] = (nD[newName] || 0) + d; delete nD[oldName]; }
+                        if (g !== undefined) { 
+                            const oldG = normalizarViejosDatos(g);
+                            const currentG = normalizarViejosDatos(nG[newName]);
+                            let sSueltos = oldG.sueltos + currentG.sueltos;
+                            let sChicas = oldG.chicas + currentG.chicas;
+                            let sGrandes = oldG.grandes + currentG.grandes;
+                            while (sSueltos >= 10) { sChicas++; sSueltos -= 10; }
+                            nG[newName] = { grandes: sGrandes, chicas: sChicas, sueltos: sSueltos };
+                            delete nG[oldName]; 
+                        }
+                        if (d !== undefined) { 
+                            const oldD = normalizarViejosDatos(d);
+                            const currentD = normalizarViejosDatos(nD[newName]);
+                            let sSueltos = oldD.sueltos + currentD.sueltos;
+                            let sChicas = oldD.chicas + currentD.chicas;
+                            let sGrandes = oldD.grandes + currentD.grandes;
+                            while (sSueltos >= 10) { sChicas++; sSueltos -= 10; }
+                            nD[newName] = { grandes: sGrandes, chicas: sChicas, sueltos: sSueltos };
+                            delete nD[oldName]; 
+                        }
                         
                         await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', 'data', sucursal, mesActual), {
                             gondola: nG, deposito: nD
@@ -279,7 +308,7 @@
                             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3 mt-4">Sabores de {sucursal}</p>
                             
                             <div className="flex-1 overflow-y-auto space-y-2 pb-10">
-                                {saboresActivos.map(sabor => (
+                                {saboresActivos.slice().sort((a, b) => a.localeCompare(b)).map(sabor => (
                                     <div key={sabor} className="flex justify-between items-center p-3 bg-white border-2 border-gray-100 rounded-xl shadow-sm">
                                         {editando === sabor ? (
                                             <div className="flex flex-1 gap-2">
@@ -307,7 +336,9 @@
 
             const renderInicio = () => {
                 const todosLosSabores = [...new Set([...Object.keys(datosStock.gondola || {}), ...Object.keys(datosStock.deposito || {})])];
-                const saboresConStock = todosLosSabores.filter(s => (datosStock.gondola[s] || 0) + (datosStock.deposito[s] || 0) > 0);
+                const saboresConStock = todosLosSabores
+                    .filter(s => (datosStock.gondola[s] || 0) + (datosStock.deposito[s] || 0) > 0)
+                    .sort((a, b) => a.localeCompare(b));
 
                 return (
                     <div className="p-4 space-y-4 pb-28">
@@ -318,43 +349,59 @@
                             <p className="text-center text-gray-400 mt-10 font-medium">Aún no hay stock cargado.</p>
                         ) : (
                             saboresConStock.map(sabor => {
-                                const cantGondola = datosStock.gondola[sabor] || 0;
-                                const cantDeposito = datosStock.deposito[sabor] || 0;
+                                const gondolaVal = normalizarViejosDatos(datosStock.gondola[sabor]);
+                                const depositoVal = normalizarViejosDatos(datosStock.deposito[sabor]);
+                                
+                                const cantGondola = sobresDesdeCajas(gondolaVal.grandes, gondolaVal.chicas, gondolaVal.sueltos);
+                                const cantDeposito = sobresDesdeCajas(depositoVal.grandes, depositoVal.chicas, depositoVal.sueltos);
                                 const total = cantGondola + cantDeposito;
                                 
-                                const cajasTotal = calcularCajas(total);
-                                const cajasGondola = calcularCajas(cantGondola);
-                                const cajasDeposito = calcularCajas(cantDeposito);
+                                // Sumamos las cajas tal como el usuario las cargó
+                                const cajasTotal = {
+                                    grandes: gondolaVal.grandes + depositoVal.grandes,
+                                    chicas: gondolaVal.chicas + depositoVal.chicas,
+                                    sueltos: gondolaVal.sueltos + depositoVal.sueltos
+                                };
+                                while(cajasTotal.sueltos >= 10) { cajasTotal.chicas++; cajasTotal.sueltos -= 10; }
 
                                 if (editandoStock === sabor) {
                                     return (
-                                        <div key={sabor} className="bg-white p-4 rounded-2xl shadow-sm border-2 border-orange-400 mb-4">
-                                            <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-3">
-                                                <h3 className="font-bold text-gray-800 text-lg">Editando: {sabor}</h3>
-                                            </div>
+                                        <div key={sabor} className="bg-white p-4 rounded-2xl shadow-sm border-2 border-orange-500 mb-4">
+                                            <h3 className="font-bold text-gray-800 text-lg mb-3">{sabor} <span className="text-orange-500 text-sm ml-2">(Editando)</span></h3>
                                             
                                             <div className="space-y-3 mb-4">
                                                 <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
-                                                    <span className="font-bold text-blue-700 block mb-2 text-sm">📍 Góndola</span>
+                                                    <span className="font-bold text-blue-700 block mb-2">📍 Góndola</span>
                                                     <div className="flex gap-2">
-                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">GRANDES</label><input type="number" min="0" value={valGondola.grandes || ''} onChange={e=>setValGondola({...valGondola, grandes: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-blue-500" placeholder="0"/></div>
-                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">CHICAS</label><input type="number" min="0" value={valGondola.chicas || ''} onChange={e=>setValGondola({...valGondola, chicas: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-blue-500" placeholder="0"/></div>
-                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">SUELTOS</label><input type="number" min="0" value={valGondola.sueltos || ''} onChange={e=>setValGondola({...valGondola, sueltos: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-blue-500" placeholder="0"/></div>
+                                                        <div className="flex-1">
+                                                            <label className="text-[10px] font-bold text-gray-500 uppercase">Grandes</label>
+                                                            <input type="number" min="0" value={valGondola.grandes} onChange={e => setValGondola({...valGondola, grandes: parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <label className="text-[10px] font-bold text-gray-500 uppercase">Chicas</label>
+                                                            <input type="number" min="0" value={valGondola.chicas} onChange={e => setValGondola({...valGondola, chicas: parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" />
+                                                        </div>
                                                     </div>
                                                 </div>
+
                                                 <div className="bg-purple-50 p-3 rounded-xl border border-purple-100">
-                                                    <span className="font-bold text-purple-700 block mb-2 text-sm">📦 Depósito</span>
+                                                    <span className="font-bold text-purple-700 block mb-2">📦 Depósito</span>
                                                     <div className="flex gap-2">
-                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">GRANDES</label><input type="number" min="0" value={valDeposito.grandes || ''} onChange={e=>setValDeposito({...valDeposito, grandes: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-purple-500" placeholder="0"/></div>
-                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">CHICAS</label><input type="number" min="0" value={valDeposito.chicas || ''} onChange={e=>setValDeposito({...valDeposito, chicas: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-purple-500" placeholder="0"/></div>
-                                                        <div className="flex flex-col flex-1"><label className="text-[10px] font-bold text-gray-500 text-center mb-1">SUELTOS</label><input type="number" min="0" value={valDeposito.sueltos || ''} onChange={e=>setValDeposito({...valDeposito, sueltos: parseInt(e.target.value) || 0})} className="w-full p-2 text-center border rounded-lg focus:outline-none focus:border-purple-500" placeholder="0"/></div>
+                                                        <div className="flex-1">
+                                                            <label className="text-[10px] font-bold text-gray-500 uppercase">Grandes</label>
+                                                            <input type="number" min="0" value={valDeposito.grandes} onChange={e => setValDeposito({...valDeposito, grandes: parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <label className="text-[10px] font-bold text-gray-500 uppercase">Chicas</label>
+                                                            <input type="number" min="0" value={valDeposito.chicas} onChange={e => setValDeposito({...valDeposito, chicas: parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div className="flex gap-2">
-                                                <button onClick={() => setEditandoStock(null)} className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold active:scale-95 transition-transform"><X size={20} className="inline mr-1"/> Cancelar</button>
-                                                <button onClick={() => guardarEdicionStock(sabor)} className="flex-1 bg-green-500 text-white py-3 rounded-xl font-bold active:scale-95 transition-transform"><Check size={20} className="inline mr-1"/> Guardar</button>
+                                            <div className="flex gap-2 mt-4">
+                                                <button onClick={() => setEditandoStock(null)} className="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-xl active:bg-gray-300 transition-colors">Cancelar</button>
+                                                <button onClick={() => guardarEdicionStock(sabor)} className="flex-1 py-3 bg-green-500 text-white font-bold rounded-xl active:scale-95 transition-transform shadow-md shadow-green-200">Guardar</button>
                                             </div>
                                         </div>
                                     );
@@ -362,27 +409,25 @@
 
                                 return (
                                     <div key={sabor} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-4">
-                                        <div className="flex justify-between items-center border-b border-gray-100 pb-2 mb-3">
-                                            <h3 className="font-bold text-gray-800 text-lg">{sabor}: <span className="text-orange-600 ml-1">{total} un.</span></h3>
+                                        <div className="flex justify-between items-center border-b border-gray-50 pb-2 mb-3">
+                                            <h3 className="font-bold text-gray-800 text-lg">{sabor}: <span className="text-orange-600 ml-1">{total} unidades</span></h3>
                                             <button onClick={() => iniciarEdicionStock(sabor)} className="text-blue-500 p-2 bg-blue-50 rounded-lg active:bg-blue-100 transition-colors">
                                                 <Edit2 size={18}/>
                                             </button>
                                         </div>
-                                        
-                                        <div className="flex gap-2 justify-center mb-4">
-                                            <span className="bg-orange-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold">{cajasTotal.grandes} Grandes</span>
-                                            <span className="bg-orange-400 text-white px-3 py-1.5 rounded-lg text-sm font-bold">{cajasTotal.chicas} Chicas</span>
-                                            <span className="bg-orange-300 text-white px-3 py-1.5 rounded-lg text-sm font-bold">{cajasTotal.sueltos} Sueltos</span>
-                                        </div>
 
-                                        <div className="flex justify-between text-xs text-gray-700">
-                                            <div className="bg-blue-50 p-2 rounded-xl w-[48%] text-center border border-blue-100">
-                                                <span className="font-bold text-blue-700 block mb-1">📍 Góndola</span>
-                                                {cajasGondola.grandes}G - {cajasGondola.chicas}C - {cajasGondola.sueltos}S
+                                        <div className="flex justify-between text-gray-700 mt-2">
+                                            <div className="bg-blue-50 p-3 rounded-xl w-[48%] text-center border border-blue-100 shadow-inner">
+                                                <span className="font-bold text-blue-700 block mb-1 text-xs uppercase tracking-wide">📍 Góndola</span>
+                                                <span className="font-black text-blue-900 text-[1.1rem]">
+                                                    {gondolaVal.grandes}G - {gondolaVal.chicas}C
+                                                </span>
                                             </div>
-                                            <div className="bg-purple-50 p-2 rounded-xl w-[48%] text-center border border-purple-100">
-                                                <span className="font-bold text-purple-700 block mb-1">📦 Depósito</span>
-                                                {cajasDeposito.grandes}G - {cajasDeposito.chicas}C - {cajasDeposito.sueltos}S
+                                            <div className="bg-purple-50 p-3 rounded-xl w-[48%] text-center border border-purple-100 shadow-inner">
+                                                <span className="font-bold text-purple-700 block mb-1 text-xs uppercase tracking-wide">📦 Depósito</span>
+                                                <span className="font-black text-purple-900 text-[1.1rem]">
+                                                    {depositoVal.grandes}G - {depositoVal.chicas}C
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
@@ -395,7 +440,9 @@
 
             const renderTotales = () => {
                 const todosLosSabores = [...new Set([...Object.keys(datosStock.gondola || {}), ...Object.keys(datosStock.deposito || {})])];
-                const saboresConStock = todosLosSabores.filter(s => (datosStock.gondola[s] || 0) + (datosStock.deposito[s] || 0) > 0);
+                const saboresConStock = todosLosSabores
+                    .filter(s => (datosStock.gondola[s] || 0) + (datosStock.deposito[s] || 0) > 0)
+                    .sort((a, b) => a.localeCompare(b));
                 
                 let granTotal = 0;
 
@@ -409,18 +456,20 @@
                             ) : (
                                 <div className="space-y-3">
                                     {saboresConStock.map(sabor => {
-                                        const total = (datosStock.gondola[sabor] || 0) + (datosStock.deposito[sabor] || 0);
+                                        const vG = normalizarViejosDatos(datosStock.gondola[sabor]);
+                                        const vD = normalizarViejosDatos(datosStock.deposito[sabor]);
+                                        const total = sobresDesdeCajas(vG.grandes, vG.chicas, vG.sueltos) + sobresDesdeCajas(vD.grandes, vD.chicas, vD.sueltos);
                                         granTotal += total;
                                         return (
-                                            <div key={sabor} className="flex justify-between items-center border-b border-gray-50 pb-2">
-                                                <span className="font-bold text-gray-700">{sabor}</span>
-                                                <span className="font-black text-gray-900">{total} un.</span>
+                                            <div key={sabor} className="flex items-center border-b border-gray-50 pb-2">
+                                                <span className="font-bold text-gray-700">{sabor}:</span>
+                                                <span className="font-black text-gray-900 text-lg ml-4">{total} un.</span>
                                             </div>
                                         );
                                     })}
                                     <div className="pt-4 mt-4 border-t-2 border-dashed border-gray-200 flex justify-between items-center">
-                                        <span className="font-black text-gray-800 uppercase tracking-widest text-sm">Gran Total</span>
-                                        <span className="font-black text-orange-600 text-2xl">{granTotal}</span>
+                                        <span className="font-black text-gray-800 uppercase tracking-widest text-sm">Gran Total:</span>
+                                        <span className="font-black text-orange-600 text-3xl">{granTotal}</span>
                                     </div>
                                 </div>
                             )}
@@ -433,11 +482,14 @@
                 const isSuma = modo === 'sumar';
                 const [busqueda, setBusqueda] = useState("");
                 const [ubicacion, setUbicacion] = useState("gondola");
-                const [cantidades, setCantidades] = useState({ grandes: 0, chicas: 0, sueltos: 0 });
+                // Iniciamos con strings vacíos para permitir escribir el guión "-" sin que se borre
+                const [cantidades, setCantidades] = useState({ grandes: '', chicas: '' });
                 const [saborSeleccionado, setSaborSeleccionado] = useState(null);
                 const [mensajeUI, setMensajeUI] = useState(""); 
 
-                const saboresFiltrados = saboresActivos.filter(s => s.toLowerCase().includes(busqueda.toLowerCase()));
+                const saboresFiltrados = saboresActivos
+                    .filter(s => s.toLowerCase().includes(busqueda.toLowerCase()))
+                    .sort((a, b) => a.localeCompare(b));
 
                 const guardarStock = async () => {
                     setMensajeUI(""); 
@@ -447,16 +499,45 @@
                         return;
                     }
                     
-                    const sobresNuevos = sobresDesdeCajas(cantidades.grandes, cantidades.chicas, cantidades.sueltos);
-                    if (sobresNuevos === 0) {
-                        setMensajeUI("Ingresa al menos 1 caja o suelto.");
+                    let cG = parseInt(cantidades.grandes) || 0;
+                    let cC = parseInt(cantidades.chicas) || 0;
+
+                    if (cG === 0 && cC === 0) {
+                        setMensajeUI("Ingresa una cantidad válida.");
                         return;
                     }
 
-                    const cantidadActual = datosStock[ubicacion]?.[saborSeleccionado] || 0;
-                    let nuevaCantidad = isSuma ? cantidadActual + sobresNuevos : cantidadActual - sobresNuevos;
+                    const objActual = normalizarViejosDatos(datosStock[ubicacion]?.[saborSeleccionado]);
+                    let ng = objActual.grandes;
+                    let nc = objActual.chicas;
+                    let ns = objActual.sueltos; // Mantenemos sueltos viejos ocultos por seguridad
+
+                    // Si estamos en la pestaña Restar, invertimos lo ingresado para restar.
+                    if (!isSuma) {
+                        cG = -cG;
+                        cC = -cC;
+                    }
+
+                    // Aplicar la suma (o resta si los números son negativos)
+                    ng += cG;
+                    nc += cC;
                     
-                    if (nuevaCantidad < 0) nuevaCantidad = 0; 
+                    // Si restaron stock y el saldo parcial es negativo, pedir prestado de cajas más grandes
+                    while (ns < 0) {
+                        if (nc > 0) { nc--; ns += 10; }
+                        else if (ng > 0) { ng--; nc += 23; ns += 10; }
+                        else break;
+                    }
+                    while (nc < 0) {
+                        if (ng > 0) { ng--; nc += 24; }
+                        else break;
+                    }
+
+                    // Verificación de saldo final (Evita que el inventario quede en negativo)
+                    if (ng < 0 || nc < 0 || ns < 0) {
+                        setMensajeUI("No hay stock suficiente para descontar esa cantidad.");
+                        return;
+                    }
 
                     const appId = "rindedos-app";
                     const docRef = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
@@ -465,7 +546,7 @@
                         ...datosStock,
                         [ubicacion]: {
                             ...datosStock[ubicacion],
-                            [saborSeleccionado]: nuevaCantidad
+                            [saborSeleccionado]: { grandes: ng, chicas: nc, sueltos: ns }
                         }
                     };
 
@@ -473,7 +554,7 @@
                     
                     setSaborSeleccionado(null);
                     setBusqueda("");
-                    setCantidades({ grandes: 0, chicas: 0, sueltos: 0 });
+                    setCantidades({ grandes: '', chicas: '' });
                     
                     setVista('inicio'); 
                 };
@@ -512,10 +593,24 @@
 
                         {saborSeleccionado && (
                             <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex-1 flex flex-col mb-4">
-                                <div className="flex justify-between items-center mb-6">
+                                <div className="flex justify-between items-center mb-4">
                                     <h3 className="font-black text-2xl text-gray-800">{saborSeleccionado}</h3>
-                                    <button onClick={() => setSaborSeleccionado(null)} className="text-gray-500 font-bold text-sm bg-gray-100 px-3 py-1 rounded-full">Cambiar</button>
+                                    <button onClick={() => setSaborSeleccionado(null)} className="text-gray-500 font-bold text-sm bg-gray-100 px-3 py-1 rounded-full active:bg-gray-200">Cambiar</button>
                                 </div>
+
+                                {(() => {
+                                    const vG = normalizarViejosDatos(datosStock.gondola[saborSeleccionado]);
+                                    const vD = normalizarViejosDatos(datosStock.deposito[saborSeleccionado]);
+                                    return (
+                                        <div className="bg-orange-50 border border-orange-100 p-3 rounded-xl mb-6 shadow-inner">
+                                            <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest block mb-1">Stock Actual Registrado</span>
+                                            <div className="flex justify-between text-sm mt-1">
+                                                <span className="font-bold text-blue-800">📍 Góndola: {vG.grandes}G - {vG.chicas}C</span>
+                                                <span className="font-bold text-purple-800">📦 Depósito: {vD.grandes}G - {vD.chicas}C</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
                                 <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
                                     <button 
@@ -535,15 +630,11 @@
                                 <div className="space-y-4 mb-8 flex-1">
                                     <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
                                         <label className="font-bold text-gray-700 text-lg">Cajas Grandes</label>
-                                        <input type="number" min="0" value={cantidades.grandes || ''} onChange={(e) => setCantidades({...cantidades, grandes: parseInt(e.target.value) || 0})} className="w-24 p-2 text-center font-bold text-xl border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" placeholder="0" />
+                                        <input type="number" value={cantidades.grandes} onChange={(e) => setCantidades({...cantidades, grandes: e.target.value})} className="w-24 p-2 text-center font-bold text-xl border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" placeholder="0" />
                                     </div>
                                     <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
                                         <label className="font-bold text-gray-700 text-lg">Cajas Chicas</label>
-                                        <input type="number" min="0" value={cantidades.chicas || ''} onChange={(e) => setCantidades({...cantidades, chicas: parseInt(e.target.value) || 0})} className="w-24 p-2 text-center font-bold text-xl border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" placeholder="0" />
-                                    </div>
-                                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                        <label className="font-bold text-gray-700 text-lg">Jugos Sueltos</label>
-                                        <input type="number" min="0" value={cantidades.sueltos || ''} onChange={(e) => setCantidades({...cantidades, sueltos: parseInt(e.target.value) || 0})} className="w-24 p-2 text-center font-bold text-xl border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" placeholder="0" />
+                                        <input type="number" value={cantidades.chicas} onChange={(e) => setCantidades({...cantidades, chicas: e.target.value})} className="w-24 p-2 text-center font-bold text-xl border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" placeholder="0" />
                                     </div>
                                 </div>
 
