@@ -3,46 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#f97316">
     <title>Stock Rinde Dos</title>
     
     <link rel="manifest" href="manifest.json">
     <script>
-        // Verificación segura para evitar errores en entornos de prueba o locales
         if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-            navigator.serviceWorker.register('sw.js').catch(err => {
-                console.log("Service Worker no se registró:", err);
-            });
+            navigator.serviceWorker.register('sw.js').catch(err => console.log('SW no registrado:', err));
         }
     </script>
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <script type="importmap">
-      {
-        "imports": {
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "lucide-react": "https://esm.sh/lucide-react@0.292.0",
-          "firebase/app": "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js",
-          "firebase/firestore": "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js",
-          "firebase/auth": "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js"
-        }
-      }
-    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
-<body class="bg-gray-50 text-gray-800 antialiased font-sans">
+<body class="bg-gray-100 font-sans selection:bg-orange-200">
     <div id="root"></div>
 
-    <script type="text/babel" data-type="module">
-        import React, { useState, useEffect } from 'react';
-        import { createRoot } from 'react-dom/client';
-        import { Home, PlusCircle, MinusCircle, List, Search, LogOut, Settings, Edit2, Trash2, Check, X } from 'lucide-react';
-        
-        import { initializeApp } from 'firebase/app';
-        import { getFirestore, collection, doc, onSnapshot, setDoc } from 'firebase/firestore';
-        import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+        // =====================================================================
+        // 1. CONFIGURACIÓN DE FIREBASE (¡Reemplaza con tus datos!)
+        // =====================================================================
         const firebaseConfig = {
             apiKey: "AIzaSyDNwNcdzSxuL3q4C8_rL8CAEp3ypEuH-k4",
             authDomain: "rindedos-7f352.firebaseapp.com",
@@ -51,120 +36,227 @@
             messagingSenderId: "417789919326",
             appId: "1:417789919326:web:1b9e89d3626c5e0c5774cf"
         };
+        // =====================================================================
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
+        let app, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Error al inicializar Firebase:", e);
+        }
 
-        // Sabores por defecto en caso de que no haya configuración en DB
-        const SABORES_BASE = ["Naranja", "Manzana", "Pera", "Durazno", "Multifruta", "Limonada", "Frutilla"];
-        const SABORES_MAXI = ["Naranja 1+1", "Manzana 1+1", "Limón 1+1"];
+        // Exportamos a window para que React pueda usarlo sin problemas de alcance
+        window.firebaseDB = db;
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.onSnapshot = onSnapshot;
+        window.firebaseConfig = firebaseConfig;
+    </script>
 
-        const calcularCajas = (totalSobres) => {
-            const grandes = Math.floor(totalSobres / 240);
-            const restoGrandes = totalSobres % 240;
-            const chicas = Math.floor(restoGrandes / 10);
-            const sueltos = restoGrandes % 10;
-            return { grandes, chicas, sueltos };
-        };
+    <script type="text/babel">
+        const { useState, useEffect } = React;
 
-        const sobresDesdeCajas = (grandes, chicas, sueltos) => {
-            return ((grandes || 0) * 240) + ((chicas || 0) * 10) + (sueltos || 0);
-        };
-
-        const normalizarViejosDatos = (valor) => {
-            // Si el valor era el viejo formato (un solo número de sobres), lo transformamos.
-            if (typeof valor === 'number') return calcularCajas(valor);
-            // Si ya es un objeto (nuevo formato), lo respetamos tal cual.
-            return valor || { grandes: 0, chicas: 0, sueltos: 0 };
-        };
+        const Icon = ({ children, size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+        );
+        const Home = (p) => <Icon {...p}><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></Icon>;
+        const PlusCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></Icon>;
+        const MinusCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></Icon>;
+        const BarChart3 = (p) => <Icon {...p}><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></Icon>;
+        const Edit2 = (p) => <Icon {...p}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></Icon>;
+        const Save = (p) => <Icon {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></Icon>;
+        const X = (p) => <Icon {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Icon>;
+        const PackageSearch = (p) => <Icon {...p}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><path d="m7.5 4.27 9 5.15"/><path d="M3.29 7 12 12l8.71-5"/><path d="M12 22V12"/><circle cx="18.5" cy="15.5" r="2.5"/><path d="M20.27 17.27 22 19"/></Icon>;
+        const Store = (p) => <Icon {...p}><path d="m2 7 4.38-4.38A2 2 0 0 1 7.8 2h8.4a2 2 0 0 1 1.41.59L22 7"/><path d="M2 12h20"/><path d="M3 12v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8"/><path d="M10 22V14h4v8"/></Icon>;
+        const Settings = (p) => <Icon {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></Icon>;
+        const Trash2 = (p) => <Icon {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></Icon>;
+        const Plus = (p) => <Icon {...p}><path d="M5 12h14"/><path d="M12 5v14"/></Icon>;
+        const Info = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></Icon>;
+        const AlertTriangle = (p) => <Icon {...p}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></Icon>;
 
         function App() {
-            const [user, setUser] = useState(null);
-            const [sucursal, setSucursal] = useState(null);
-            const [vista, setVista] = useState('inicio'); 
-            const [datosStock, setDatosStock] = useState({ gondola: {}, deposito: {} });
+            // Protección contra carga prematura
+            const [isDummyConfig] = useState(window.firebaseConfig?.projectId === 'tu-proyecto');
+            const [isFirebaseReady, setIsFirebaseReady] = useState(!!window.firebaseDB);
+            const [loadError, setLoadError] = useState(false);
             
-            // Estado principal para la lista de sabores
-            const [configOpen, setConfigOpen] = useState(false);
+            // Asignación segura de funciones
+            const doc = window.doc;
+            const setDoc = window.setDoc;
+            const onSnapshot = window.onSnapshot;
+
+            useEffect(() => {
+                if (isFirebaseReady) return;
+                let intentos = 0;
+                const checkFirebase = setInterval(() => {
+                    intentos++;
+                    if (window.firebaseDB) {
+                        setIsFirebaseReady(true);
+                        clearInterval(checkFirebase);
+                    } else if (intentos > 50) { // Timeout tras 5 segundos
+                        setLoadError(true);
+                        clearInterval(checkFirebase);
+                    }
+                }, 100);
+                return () => clearInterval(checkFirebase);
+            }, [isFirebaseReady]);
+
+            const db = window.firebaseDB;
+            const mesActual = new Date().toISOString().slice(0, 7);
+            const appId = "rindedos-app";
+
+            // Estados de navegación
+            const [sucursal, setSucursal] = useState(localStorage.getItem('rindeDos_sucursal') || 'Diarco');
+            const [appIniciada, setAppIniciada] = useState(false); // Controla la pantalla de bienvenida
+            const [tabActual, setTabActual] = useState('inicio');
+            
+            // Estados de datos (Aseguramos que siempre existan gondola y deposito para evitar crasheos)
+            const [datosStock, setDatosStock] = useState({ gondola: {}, deposito: {} });
             const [saboresActivos, setSaboresActivos] = useState([]);
-
-            // Estado para la edición rápida en Resumen General
+            
+            // Estados de edición (Resumen General)
             const [editandoStock, setEditandoStock] = useState(null);
-            const [valGondola, setValGondola] = useState({ grandes: 0, chicas: 0, sueltos: 0 });
-            const [valDeposito, setValDeposito] = useState({ grandes: 0, chicas: 0, sueltos: 0 });
+            const [valGondola, setValGondola] = useState({ grandes: "", chicas: "" });
+            const [valDeposito, setValDeposito] = useState({ grandes: "" });
 
-            const mesActual = new Date().toISOString().slice(0, 7); 
+            // Estados de carga (Agregar/Restar)
+            const [saborSeleccionado, setSaborSeleccionado] = useState('');
+            const [ubicacionSel, setUbicacionSel] = useState('gondola');
+            const [cantGondola, setCantGondola] = useState({ grandes: '', chicas: '' });
+            const [cantDeposito, setCantDeposito] = useState({ grandes: '' });
+
+            // Estados de ajustes
+            const [mostrarAjustes, setMostrarAjustes] = useState(false);
+            const [nuevoSabor, setNuevoSabor] = useState('');
+            const [editandoSaborInfo, setEditandoSaborInfo] = useState(null);
+            const [nombreEditado, setNombreEditado] = useState('');
 
             useEffect(() => {
-                signInAnonymously(auth);
-                const unsub = onAuthStateChanged(auth, (u) => setUser(u));
-                return () => unsub();
-            }, []);
+                localStorage.setItem('rindeDos_sucursal', sucursal);
+                if (!db) return;
 
-            useEffect(() => {
-                if (!user || !sucursal) return;
-
-                const appId = "rindedos-app";
-                
-                // 1. Escuchar los datos de Stock
-                const docRefStock = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
-                const unsubStock = onSnapshot(docRefStock, (docSnap) => {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
+                const unsub = onSnapshot(docRef, (docSnap) => {
                     if (docSnap.exists()) {
-                        setDatosStock(docSnap.data());
+                        const data = docSnap.data();
+                        // Sanitizamos los datos para que nunca falte gondola o deposito
+                        setDatosStock({
+                            gondola: data.gondola || {},
+                            deposito: data.deposito || {}
+                        });
                     } else {
                         setDatosStock({ gondola: {}, deposito: {} });
                     }
-                }, (error) => console.error("Error BD:", error));
+                });
 
-                // 2. Escuchar la configuración de Sabores personalizada por sucursal
-                const docRefSabores = doc(db, 'artifacts', appId, 'public', `config_sabores_${sucursal}`);
-                const unsubSabores = onSnapshot(docRefSabores, (docSnap) => {
-                    if (docSnap.exists()) {
-                        setSaboresActivos(docSnap.data().lista || []);
+                const configRef = doc(db, 'artifacts', appId, 'public', `config_sabores_${sucursal}`);
+                const unsubConfig = onSnapshot(configRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().lista) {
+                        setSaboresActivos(docSnap.data().lista.sort((a,b) => a.localeCompare(b)));
                     } else {
-                        // Si no existe, inicializar con los valores por defecto
-                        const defaults = sucursal === 'Maxiconsumo' ? [...SABORES_BASE, ...SABORES_MAXI] : [...SABORES_BASE];
-                        setSaboresActivos(defaults);
-                        setDoc(docRefSabores, { lista: defaults }); // Guarda en DB
+                        const listaPorDefecto = [
+                            "Ananá", "Durazno", "Frutilla", "Limón", "Limón 1+1", 
+                            "Manzana", "Manzana 1+1", "Mix Frutal", "Naranja", 
+                            "Naranja 1+1", "Naranja Banana", "Naranja Durazno", 
+                            "Naranja Mango", "Pera", "Pomelo Rosado"
+                        ];
+                        const filtrados = sucursal === 'Diarco' ? listaPorDefecto.filter(s => !s.includes('1+1')) : listaPorDefecto;
+                        setSaboresActivos(filtrados.sort((a,b) => a.localeCompare(b)));
                     }
                 });
 
-                return () => {
-                    unsubStock();
-                    unsubSabores();
-                };
-            }, [user, sucursal, mesActual]);
+                return () => { unsub(); unsubConfig(); };
+            }, [sucursal, db]);
+
+            // Utilidades de Datos
+            const gondolaData = datosStock.gondola || {};
+            const depositoData = datosStock.deposito || {};
+
+            const sobresDesdeCajas = (grandes, chicas) => {
+                let g = parseInt(grandes) || 0;
+                let c = parseInt(chicas) || 0;
+                return (g * 240) + (c * 10);
+            };
+
+            const guardarSaboresEnBD = async (nuevaLista) => {
+                setSaboresActivos(nuevaLista.sort((a,b) => a.localeCompare(b)));
+                if (!db) return;
+                const configRef = doc(db, 'artifacts', appId, 'public', `config_sabores_${sucursal}`);
+                await setDoc(configRef, { lista: nuevaLista });
+            };
+
+            const agregarSaborManual = () => {
+                if (!nuevoSabor.trim() || saboresActivos.includes(nuevoSabor.trim())) return;
+                guardarSaboresEnBD([...saboresActivos, nuevoSabor.trim()]);
+                setNuevoSabor('');
+            };
+
+            const eliminarSaborManual = (saborBorrar) => {
+                guardarSaboresEnBD(saboresActivos.filter(s => s !== saborBorrar));
+            };
+
+            const guardarEdicionNombreSabor = async () => {
+                if (!nombreEditado.trim() || nombreEditado === editandoSaborInfo) {
+                    setEditandoSaborInfo(null);
+                    return;
+                }
+                
+                const nuevaLista = saboresActivos.map(s => s === editandoSaborInfo ? nombreEditado.trim() : s);
+                guardarSaboresEnBD(nuevaLista);
+
+                if (db) {
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
+                    const stockGondolaAntiguo = gondolaData[editandoSaborInfo] || {grandes: 0, chicas: 0};
+                    const stockDepositoAntiguo = depositoData[editandoSaborInfo] || {grandes: 0};
+                    
+                    const nuevoDoc = JSON.parse(JSON.stringify(datosStock)); 
+                    if (!nuevoDoc.gondola) nuevoDoc.gondola = {};
+                    if (!nuevoDoc.deposito) nuevoDoc.deposito = {};
+                    
+                    delete nuevoDoc.gondola[editandoSaborInfo];
+                    delete nuevoDoc.deposito[editandoSaborInfo];
+                    
+                    nuevoDoc.gondola[nombreEditado.trim()] = stockGondolaAntiguo;
+                    nuevoDoc.deposito[nombreEditado.trim()] = stockDepositoAntiguo;
+                    
+                    await setDoc(docRef, nuevoDoc);
+                }
+                setEditandoSaborInfo(null);
+            };
 
             const iniciarEdicionStock = (sabor) => {
-                const cGondola = normalizarViejosDatos(datosStock.gondola[sabor]);
-                const cDeposito = normalizarViejosDatos(datosStock.deposito[sabor]);
-                setValGondola({ grandes: cGondola.grandes, chicas: cGondola.chicas, sueltos: 0 }); // Limpiado sueltos
-                setValDeposito({ grandes: cDeposito.grandes, chicas: 0, sueltos: 0 }); // Depósito solo grandes
+                const g = gondolaData[sabor] || { grandes: 0, chicas: 0 };
+                const d = depositoData[sabor] || { grandes: 0 };
+                
+                setValGondola({ 
+                    grandes: g.grandes === 0 ? "" : g.grandes.toString(), 
+                    chicas: g.chicas === 0 ? "" : g.chicas.toString() 
+                }); 
+                setValDeposito({ 
+                    grandes: d.grandes === 0 ? "" : d.grandes.toString() 
+                }); 
                 setEditandoStock(sabor);
             };
 
             const guardarEdicionStock = async (sabor) => {
-                let { grandes: gG, chicas: cG } = valGondola;
-                let { grandes: gD } = valDeposito;
-
-                const appId = "rindedos-app";
+                if (!db) return;
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
                 
-                // Mantenemos los sueltos originales si los hubiera, pero no dejamos que el usuario los vea/edite
-                const sueltosGondolaOriginal = normalizarViejosDatos(datosStock.gondola[sabor]).sueltos;
-                const sueltosDepositoOriginal = normalizarViejosDatos(datosStock.deposito[sabor]).sueltos;
-                const chicasDepositoOriginal = normalizarViejosDatos(datosStock.deposito[sabor]).chicas; // Mantenemos chicas en depo si había
-
                 const nuevoDocumento = {
                     ...datosStock,
                     gondola: {
-                        ...datosStock.gondola,
-                        [sabor]: { grandes: gG || 0, chicas: cG || 0, sueltos: sueltosGondolaOriginal || 0 }
+                        ...gondolaData,
+                        [sabor]: { 
+                            grandes: parseInt(valGondola.grandes) || 0, 
+                            chicas: parseInt(valGondola.chicas) || 0 
+                        }
                     },
                     deposito: {
-                        ...datosStock.deposito,
-                        [sabor]: { grandes: gD || 0, chicas: chicasDepositoOriginal || 0, sueltos: sueltosDepositoOriginal || 0 }
+                        ...depositoData,
+                        [sabor]: { 
+                            grandes: parseInt(valDeposito.grandes) || 0 
+                        }
                     }
                 };
 
@@ -172,196 +264,39 @@
                 setEditandoStock(null);
             };
 
-            if (!sucursal) {
-                return (
-                    <div className="flex flex-col items-center justify-center min-h-screen bg-orange-50 p-6">
-                        <div className="w-full max-w-sm text-center">
-                            <div className="bg-orange-500 text-white p-6 rounded-3xl shadow-xl mb-10">
-                                <h1 className="text-3xl font-black mb-2">Rinde Dos</h1>
-                                <p className="text-orange-100">Control de Stock Móvil</p>
-                            </div>
-                            
-                            <h2 className="text-xl font-bold text-gray-700 mb-6">Selecciona una sucursal</h2>
-                            
-                            <button 
-                                onClick={() => { setSucursal('Diarco'); setVista('inicio'); }}
-                                className="w-full bg-white border-2 border-blue-500 text-blue-600 font-bold text-lg py-5 rounded-2xl mb-4 shadow-sm active:scale-95 transition-transform"
-                            >
-                                Diarco
-                            </button>
-                            
-                            <button 
-                                onClick={() => { setSucursal('Maxiconsumo'); setVista('inicio'); }}
-                                className="w-full bg-white border-2 border-green-500 text-green-600 font-bold text-lg py-5 rounded-2xl shadow-sm active:scale-95 transition-transform"
-                            >
-                                Maxiconsumo
-                            </button>
-                        </div>
-                    </div>
-                );
-            }
-
-            const ModalSabores = () => {
-                const [nuevoSabor, setNuevoSabor] = useState("");
-                const [editandoSaborInfo, setEditandoSaborInfo] = useState(null); // Rename to avoid confusion with editandoStock
-                const [editValor, setEditValor] = useState("");
-                const [error, setError] = useState("");
-
-                const agregarSabor = async () => {
-                    setError("");
-                    if (!nuevoSabor.trim()) return;
-                    if (saboresActivos.includes(nuevoSabor.trim())) {
-                        setError("Ese sabor ya existe.");
-                        return;
-                    }
-                    
-                    const nuevaLista = [...saboresActivos, nuevoSabor.trim()];
-                    // Actualizar el estado local inmediatamente para mejor UX
-                    setSaboresActivos(nuevaLista);
-                    await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', `config_sabores_${sucursal}`), { lista: nuevaLista });
-                    setNuevoSabor("");
-                };
-
-                const eliminarSabor = async (sabor) => {
-                    const confirmacion = window.confirm(`¿Estás seguro de eliminar "${sabor}" de la lista?`);
-                    if (confirmacion) {
-                        const nuevaLista = saboresActivos.filter(s => s !== sabor);
-                        setSaboresActivos(nuevaLista);
-                        await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', `config_sabores_${sucursal}`), { lista: nuevaLista });
-                    }
-                };
-
-                const guardarEdicionSabor = async (oldName) => {
-                    setError("");
-                    const newName = editValor.trim();
-                    if (!newName || newName === oldName) {
-                        setEditandoSaborInfo(null);
-                        return;
-                    }
-
-                    if (saboresActivos.includes(newName)) {
-                        setError("El nombre nuevo ya está en uso.");
-                        return;
-                    }
-
-                    // 1. Actualiza la lista en configuración
-                    const nuevaLista = saboresActivos.map(s => s === oldName ? newName : s);
-                    setSaboresActivos(nuevaLista); // Update local state
-                    await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', `config_sabores_${sucursal}`), { lista: nuevaLista });
-
-                    // 2. Migra el stock asociado en la base de datos
-                    const g = datosStock.gondola[oldName];
-                    const d = datosStock.deposito[oldName];
-                    
-                    if (g !== undefined || d !== undefined) {
-                        const nG = { ...datosStock.gondola };
-                        const nD = { ...datosStock.deposito };
-                        
-                        if (g !== undefined) { 
-                            // Transferir los datos exactos que estaban
-                            nG[newName] = { ...g }; 
-                            delete nG[oldName]; 
-                        }
-                        if (d !== undefined) { 
-                            nD[newName] = { ...d }; 
-                            delete nD[oldName]; 
-                        }
-                        
-                        await setDoc(doc(db, 'artifacts', 'rindedos-app', 'public', 'data', sucursal, mesActual), {
-                            gondola: nG, deposito: nD
-                        });
-                    }
-
-                    setEditandoSaborInfo(null);
-                };
-
-                return (
-                    <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity">
-                        <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-6 max-h-[90vh] flex flex-col shadow-2xl">
-                            <div className="flex justify-between items-center mb-6">
-                                <h2 className="text-xl font-black text-gray-800">Gestionar Sabores</h2>
-                                <button onClick={() => setConfigOpen(false)} className="bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200">
-                                    <X size={20}/>
-                                </button>
-                            </div>
-                            
-                            <div className="flex gap-2 mb-2">
-                                <input 
-                                    value={nuevoSabor} 
-                                    onChange={e => {setNuevoSabor(e.target.value); setError("");}} 
-                                    placeholder="Ej: Mix Frutal..." 
-                                    className="flex-1 border-2 border-gray-200 rounded-xl p-3 bg-gray-50 focus:border-orange-500 outline-none font-medium" 
-                                />
-                                <button onClick={agregarSabor} className="bg-orange-500 active:scale-95 text-white p-3 rounded-xl font-bold transition-transform">
-                                    <PlusCircle size={24}/>
-                                </button>
-                            </div>
-                            
-                            {error && <p className="text-red-500 text-sm font-bold mb-4">{error}</p>}
-
-                            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-3 mt-4">Sabores de {sucursal}</p>
-                            
-                            <div className="flex-1 overflow-y-auto space-y-2 pb-10">
-                                {saboresActivos.slice().sort((a, b) => a.localeCompare(b)).map(sabor => (
-                                    <div key={sabor} className="flex justify-between items-center p-3 bg-white border-2 border-gray-100 rounded-xl shadow-sm">
-                                        {editandoSaborInfo === sabor ? (
-                                            <div className="flex flex-1 gap-2">
-                                                <input value={editValor} onChange={e=>setEditValor(e.target.value)} className="flex-1 border-2 border-orange-500 rounded-lg p-2 outline-none font-bold text-gray-700" />
-                                                <button onClick={()=>guardarEdicionSabor(sabor)} className="text-white p-2 bg-green-500 rounded-lg active:scale-95"><Check size={18}/></button>
-                                                <button onClick={()=>setEditandoSaborInfo(null)} className="text-gray-500 p-2 bg-gray-200 rounded-lg active:scale-95"><X size={18}/></button>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <span className="font-bold text-gray-700">{sabor}</span>
-                                                <div className="flex gap-2">
-                                                    <button onClick={()=>{setEditandoSaborInfo(sabor); setEditValor(sabor); setError("");}} className="text-blue-500 p-2 bg-blue-50 rounded-lg active:bg-blue-100"><Edit2 size={18}/></button>
-                                                    <button onClick={()=>eliminarSabor(sabor)} className="text-red-500 p-2 bg-red-50 rounded-lg active:bg-red-100"><Trash2 size={18}/></button>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                ))}
-                                {saboresActivos.length === 0 && <p className="text-center text-gray-400 py-4">No hay sabores configurados.</p>}
-                            </div>
-                        </div>
-                    </div>
-                );
-            };
-
             const renderInicio = () => {
-                const todosLosSabores = [...new Set([...Object.keys(datosStock.gondola || {}), ...Object.keys(datosStock.deposito || {})])];
+                const todosLosSabores = [...new Set([...Object.keys(gondolaData), ...Object.keys(depositoData)])];
                 const saboresConStock = todosLosSabores
-                    .filter(s => (datosStock.gondola[s] || 0) + (datosStock.deposito[s] || 0) > 0)
+                    .filter(sabor => {
+                        const g = gondolaData[sabor] || {};
+                        const d = depositoData[sabor] || {};
+                        return (parseInt(g.grandes) || 0) > 0 || (parseInt(g.chicas) || 0) > 0 || (parseInt(d.grandes) || 0) > 0;
+                    })
                     .sort((a, b) => a.localeCompare(b));
 
                 return (
-                    <div className="p-4 space-y-4 pb-28">
-                        <h2 className="text-2xl font-black text-gray-800">Resumen General</h2>
-                        <p className="text-gray-500 mb-4">Mes: {mesActual}</p>
+                    <div className="p-4 space-y-4 pb-28 animate-fade-in">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-black text-gray-800">Resumen General</h2>
+                            <button onClick={() => setMostrarAjustes(true)} className="p-2 bg-gray-200 rounded-full hover:bg-gray-300">
+                                <Settings size={20} className="text-gray-700"/>
+                            </button>
+                        </div>
 
                         {saboresConStock.length === 0 ? (
                             <p className="text-center text-gray-400 mt-10 font-medium">Aún no hay stock cargado.</p>
                         ) : (
                             saboresConStock.map(sabor => {
-                                const gondolaVal = normalizarViejosDatos(datosStock.gondola[sabor]);
-                                const depositoVal = normalizarViejosDatos(datosStock.deposito[sabor]);
-                                
-                                const cantGondola = sobresDesdeCajas(gondolaVal.grandes, gondolaVal.chicas, gondolaVal.sueltos);
-                                const cantDeposito = sobresDesdeCajas(depositoVal.grandes, depositoVal.chicas, depositoVal.sueltos);
-                                const total = cantGondola + cantDeposito;
-                                
-                                // Sumamos las cajas tal como el usuario las cargó
-                                const cajasTotal = {
-                                    grandes: gondolaVal.grandes + depositoVal.grandes,
-                                    chicas: gondolaVal.chicas + depositoVal.chicas,
-                                    sueltos: gondolaVal.sueltos + depositoVal.sueltos
-                                };
-                                while(cajasTotal.sueltos >= 10) { cajasTotal.chicas++; cajasTotal.sueltos -= 10; }
+                                const g = gondolaData[sabor] || { grandes: 0, chicas: 0 };
+                                const d = depositoData[sabor] || { grandes: 0 };
 
                                 if (editandoStock === sabor) {
                                     return (
                                         <div key={sabor} className="bg-white p-4 rounded-2xl shadow-sm border-2 border-orange-500 mb-4">
-                                            <h3 className="font-bold text-gray-800 text-lg mb-3">{sabor} <span className="text-orange-500 text-sm ml-2">(Editando)</span></h3>
+                                            <div className="flex justify-between items-center mb-3 border-b pb-2">
+                                                <h3 className="font-bold text-gray-800 text-lg">{sabor} <span className="text-orange-500 text-sm ml-2">(Editando)</span></h3>
+                                                <button onClick={() => setEditandoStock(null)} className="text-gray-400 hover:text-red-500"><X size={20}/></button>
+                                            </div>
                                             
                                             <div className="space-y-3 mb-4">
                                                 <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
@@ -369,11 +304,11 @@
                                                     <div className="flex gap-2">
                                                         <div className="flex-1">
                                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Grandes</label>
-                                                            <input type="number" min="0" value={valGondola.grandes === 0 && valGondola.grandes !== '0' ? '' : valGondola.grandes} onChange={e => setValGondola({...valGondola, grandes: e.target.value === '' ? '' : parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" placeholder="0" />
+                                                            <input type="number" value={valGondola.grandes} onChange={e => setValGondola({...valGondola, grandes: e.target.value})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" placeholder="0" />
                                                         </div>
                                                         <div className="flex-1">
                                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Chicas</label>
-                                                            <input type="number" min="0" value={valGondola.chicas === 0 && valGondola.chicas !== '0' ? '' : valGondola.chicas} onChange={e => setValGondola({...valGondola, chicas: e.target.value === '' ? '' : parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" placeholder="0" />
+                                                            <input type="number" value={valGondola.chicas} onChange={e => setValGondola({...valGondola, chicas: e.target.value})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" placeholder="0" />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -383,41 +318,39 @@
                                                     <div className="flex gap-2">
                                                         <div className="flex-1">
                                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Grandes</label>
-                                                            <input type="number" min="0" value={valDeposito.grandes === 0 && valDeposito.grandes !== '0' ? '' : valDeposito.grandes} onChange={e => setValDeposito({...valDeposito, grandes: e.target.value === '' ? '' : parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" placeholder="0" />
+                                                            <input type="number" value={valDeposito.grandes} onChange={e => setValDeposito({...valDeposito, grandes: e.target.value})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" placeholder="0" />
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            <div className="flex gap-2 mt-4">
-                                                <button onClick={() => setEditandoStock(null)} className="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-xl active:bg-gray-300 transition-colors">Cancelar</button>
-                                                <button onClick={() => guardarEdicionStock(sabor)} className="flex-1 py-3 bg-green-500 text-white font-bold rounded-xl active:scale-95 transition-transform shadow-md shadow-green-200">Guardar</button>
-                                            </div>
+                                            <button onClick={() => guardarEdicionStock(sabor)} className="w-full bg-orange-500 text-white font-bold p-3 rounded-xl shadow-md flex justify-center items-center gap-2">
+                                                <Save size={18} /> Guardar Cambios
+                                            </button>
                                         </div>
                                     );
                                 }
 
                                 return (
                                     <div key={sabor} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-4">
-                                        <div className="flex justify-between items-center border-b border-gray-50 pb-2 mb-3">
-                                            <h3 className="font-bold text-gray-800 text-lg">{sabor}: <span className="text-orange-600 ml-1">{total} unidades</span></h3>
-                                            <button onClick={() => iniciarEdicionStock(sabor)} className="text-blue-500 p-2 bg-blue-50 rounded-lg active:bg-blue-100 transition-colors">
-                                                <Edit2 size={18}/>
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h3 className="font-black text-gray-800 text-xl">{sabor}</h3>
+                                            <button onClick={() => iniciarEdicionStock(sabor)} className="bg-blue-100 text-blue-600 p-2 rounded-lg hover:bg-blue-200">
+                                                <Edit2 size={16} />
                                             </button>
                                         </div>
-
-                                        <div className="flex justify-between text-gray-700 mt-2">
-                                            <div className="bg-blue-50 p-3 rounded-xl w-[48%] text-center border border-blue-100 shadow-inner">
-                                                <span className="font-bold text-blue-700 block mb-1 text-xs uppercase tracking-wide">📍 Góndola</span>
-                                                <span className="font-black text-blue-900 text-[1.1rem]">
-                                                    {gondolaVal.grandes}G - {gondolaVal.chicas}C
-                                                </span>
+                                        
+                                        <div className="flex gap-3">
+                                            <div className="flex-1 bg-blue-50/50 rounded-xl p-3 border border-blue-100 flex flex-col justify-center items-center text-center">
+                                                <span className="text-xs font-bold text-blue-800 uppercase flex items-center gap-1 mb-1">📍 Góndola</span>
+                                                <div className="font-black text-blue-900 text-[1.1rem]">
+                                                    {parseInt(g.grandes) || 0}G - {parseInt(g.chicas) || 0}C
+                                                </div>
                                             </div>
-                                            <div className="bg-purple-50 p-3 rounded-xl w-[48%] text-center border border-purple-100 shadow-inner">
-                                                <span className="font-bold text-purple-700 block mb-1 text-xs uppercase tracking-wide">📦 Depósito</span>
-                                                <span className="font-black text-purple-900 text-[1.1rem]">
-                                                    {depositoVal.grandes}G
-                                                </span>
+                                            <div className="flex-1 bg-purple-50/50 rounded-xl p-3 border border-purple-100 flex flex-col justify-center items-center text-center">
+                                                <span className="text-xs font-bold text-purple-800 uppercase flex items-center gap-1 mb-1">📦 Depósito</span>
+                                                <div className="font-black text-purple-900 text-[1.1rem]">
+                                                    {parseInt(d.grandes) || 0}G
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -428,277 +361,351 @@
                 );
             };
 
-            const renderTotales = () => {
-                const todosLosSabores = [...new Set([...Object.keys(datosStock.gondola || {}), ...Object.keys(datosStock.deposito || {})])];
-                const saboresConStock = todosLosSabores
-                    .filter(s => (datosStock.gondola[s] || 0) + (datosStock.deposito[s] || 0) > 0)
-                    .sort((a, b) => a.localeCompare(b));
-                
-                let granTotal = 0;
-
-                return (
-                    <div className="p-4 space-y-4 pb-28">
-                        <h2 className="text-2xl font-black text-gray-800 mb-4">Totales del Mes</h2>
-                        
-                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                            {saboresConStock.length === 0 ? (
-                                <p className="text-center text-gray-400">Sin stock registrado.</p>
-                            ) : (
-                                <div className="space-y-3">
-                                    {saboresConStock.map(sabor => {
-                                        const vG = normalizarViejosDatos(datosStock.gondola[sabor]);
-                                        const vD = normalizarViejosDatos(datosStock.deposito[sabor]);
-                                        const total = sobresDesdeCajas(vG.grandes, vG.chicas, vG.sueltos) + sobresDesdeCajas(vD.grandes, vD.chicas, vD.sueltos);
-                                        granTotal += total;
-                                        return (
-                                            <div key={sabor} className="flex items-center border-b border-gray-50 pb-2">
-                                                <span className="font-bold text-gray-700">{sabor}:</span>
-                                                <span className="font-black text-gray-900 text-lg ml-4">{total} un.</span>
-                                            </div>
-                                        );
-                                    })}
-                                    <div className="pt-4 mt-4 border-t-2 border-dashed border-gray-200 flex justify-between items-center">
-                                        <span className="font-black text-gray-800 uppercase tracking-widest text-sm">Gran Total:</span>
-                                        <span className="font-black text-orange-600 text-3xl">{granTotal}</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
-            };
-
-            const FormularioStock = ({ modo }) => {
-                const isSuma = modo === 'sumar';
-                const [busqueda, setBusqueda] = useState("");
-                const [ubicacion, setUbicacion] = useState("gondola");
-                // Iniciamos con strings vacíos para permitir escribir el guión "-" sin que se borre
-                const [cantidades, setCantidades] = useState({ grandes: '', chicas: '' });
-                const [saborSeleccionado, setSaborSeleccionado] = useState(null);
-                const [mensajeUI, setMensajeUI] = useState(""); 
-
-                const saboresFiltrados = saboresActivos
-                    .filter(s => s.toLowerCase().includes(busqueda.toLowerCase()))
-                    .sort((a, b) => a.localeCompare(b));
+            const renderCargar = () => {
+                const modoAgregar = tabActual === 'agregar';
 
                 const guardarStock = async () => {
-                    setMensajeUI(""); 
-
-                    if (!saborSeleccionado) {
-                        setMensajeUI("Selecciona un sabor de la lista.");
-                        return;
-                    }
+                    if (!saborSeleccionado) return;
                     
-                    let cG = parseInt(cantidades.grandes) || 0;
-                    // Solo tomamos cajas chicas si está en Góndola
-                    let cC = ubicacion === 'gondola' ? (parseInt(cantidades.chicas) || 0) : 0;
+                    let inputG_g = parseInt(cantGondola.grandes) || 0;
+                    let inputG_c = parseInt(cantGondola.chicas) || 0;
+                    let inputD_g = parseInt(cantDeposito.grandes) || 0;
 
-                    if (cG === 0 && cC === 0) {
-                        setMensajeUI("Ingresa una cantidad válida.");
-                        return;
+                    if (!modoAgregar) {
+                        inputG_g = -Math.abs(inputG_g);
+                        inputG_c = -Math.abs(inputG_c);
+                        inputD_g = -Math.abs(inputD_g);
                     }
 
-                    const objActual = normalizarViejosDatos(datosStock[ubicacion]?.[saborSeleccionado]);
-                    let ng = objActual.grandes;
-                    let nc = objActual.chicas;
-                    let ns = objActual.sueltos; // Mantenemos sueltos viejos ocultos por seguridad
+                    const currentG_g = parseInt(gondolaData[saborSeleccionado]?.grandes) || 0;
+                    const currentG_c = parseInt(gondolaData[saborSeleccionado]?.chicas) || 0;
+                    const currentD_g = parseInt(depositoData[saborSeleccionado]?.grandes) || 0;
 
-                    // Si estamos en la pestaña Restar, invertimos lo ingresado para restar.
-                    if (!isSuma) {
-                        cG = -cG;
-                        cC = -cC;
+                    let newG_g = currentG_g + inputG_g;
+                    let newG_c = currentG_c + inputG_c;
+                    let newD_g = currentD_g + inputD_g;
+
+                    if (newG_c < 0) {
+                        const cajasGrandesNecesarias = Math.ceil(Math.abs(newG_c) / 24);
+                        newG_g -= cajasGrandesNecesarias;
+                        newG_c += (cajasGrandesNecesarias * 24);
                     }
 
-                    // Aplicar la suma (o resta si los números son negativos)
-                    ng += cG;
-                    nc += cC;
-                    
-                    // Si restaron stock y el saldo parcial es negativo, pedir prestado de cajas más grandes
-                    while (ns < 0) {
-                        if (nc > 0) { nc--; ns += 10; }
-                        else if (ng > 0) { ng--; nc += 23; ns += 10; }
-                        else break;
-                    }
-                    while (nc < 0) {
-                        if (ng > 0) { ng--; nc += 24; }
-                        else break;
-                    }
+                    if (newG_g < 0) newG_g = 0;
+                    if (newG_c < 0) newG_c = 0;
+                    if (newD_g < 0) newD_g = 0;
 
-                    // Verificación de saldo final (Evita que el inventario quede en negativo)
-                    if (ng < 0 || nc < 0 || ns < 0) {
-                        setMensajeUI("No hay stock suficiente para descontar esa cantidad.");
-                        return;
-                    }
-
-                    const appId = "rindedos-app";
                     const docRef = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
-                    
                     const nuevoDocumento = {
                         ...datosStock,
-                        [ubicacion]: {
-                            ...datosStock[ubicacion],
-                            [saborSeleccionado]: { grandes: ng, chicas: nc, sueltos: ns }
+                        gondola: {
+                            ...gondolaData,
+                            [saborSeleccionado]: { grandes: newG_g, chicas: newG_c }
+                        },
+                        deposito: {
+                            ...depositoData,
+                            [saborSeleccionado]: { grandes: newD_g }
                         }
                     };
 
                     await setDoc(docRef, nuevoDocumento);
-                    
-                    setSaborSeleccionado(null);
-                    setBusqueda("");
-                    setCantidades({ grandes: '', chicas: '' });
-                    
-                    setVista('inicio'); 
+                    setSaborSeleccionado('');
+                    setCantGondola({ grandes: '', chicas: '' });
+                    setCantDeposito({ grandes: '' });
+                    setTabActual('inicio');
                 };
 
                 return (
-                    <div className="p-4 flex flex-col min-h-full pb-28">
-                        <h2 className={`text-2xl font-black mb-6 ${isSuma ? 'text-green-600' : 'text-red-600'}`}>
-                            {isSuma ? 'Agregar Stock' : 'Descontar Stock'}
-                        </h2>
+                    <div className="p-4 pb-28 animate-fade-in">
+                        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                            <h2 className="text-xl font-black text-gray-800 mb-6 flex items-center gap-2">
+                                {modoAgregar ? <><PlusCircle className="text-green-500"/> Agregar Stock</> : <><MinusCircle className="text-red-500"/> Restar Stock</>}
+                            </h2>
 
-                        <div className="relative mb-4">
-                            <Search className="absolute left-3 top-3 text-gray-400" size={20} />
-                            <input 
-                                type="text" 
-                                placeholder="Buscar sabor (o elige abajo)..." 
-                                className="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-orange-500 outline-none font-medium text-gray-800"
-                                value={busqueda}
-                                onChange={(e) => {setBusqueda(e.target.value); setMensajeUI("");}}
-                            />
-                        </div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Sabor</label>
+                            <select 
+                                value={saborSeleccionado} 
+                                onChange={e => setSaborSeleccionado(e.target.value)}
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl mb-4 font-semibold text-gray-800 outline-none"
+                            >
+                                <option value="">Selecciona un sabor...</option>
+                                {saboresActivos.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
 
-                        {!saborSeleccionado && (
-                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 max-h-64 overflow-y-auto mb-4">
-                                {saboresFiltrados.map(sabor => (
-                                    <button 
-                                        key={sabor} 
-                                        onClick={() => {setSaborSeleccionado(sabor); setMensajeUI("");}}
-                                        className="w-full text-left p-4 border-b last:border-b-0 hover:bg-orange-50 active:bg-orange-100 font-bold text-gray-700 transition-colors"
-                                    >
-                                        {sabor}
-                                    </button>
-                                ))}
-                                {saboresFiltrados.length === 0 && <p className="p-4 text-gray-400 text-center">No se encontraron sabores.</p>}
-                            </div>
-                        )}
-
-                        {saborSeleccionado && (
-                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex-1 flex flex-col mb-4">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="font-black text-2xl text-gray-800">{saborSeleccionado}</h3>
-                                    <button onClick={() => setSaborSeleccionado(null)} className="text-gray-500 font-bold text-sm bg-gray-100 px-3 py-1 rounded-full active:bg-gray-200">Cambiar</button>
-                                </div>
-
-                                {(() => {
-                                    const vG = normalizarViejosDatos(datosStock.gondola[saborSeleccionado]);
-                                    const vD = normalizarViejosDatos(datosStock.deposito[saborSeleccionado]);
-                                    return (
-                                        <div className="bg-orange-50 border border-orange-100 p-3 rounded-xl mb-6 shadow-inner">
-                                            <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest block mb-1">Stock Actual Registrado</span>
-                                            <div className="flex justify-between text-sm mt-1">
-                                                <span className="font-bold text-blue-800">📍 Góndola: {vG.grandes}G - {vG.chicas}C</span>
-                                                <span className="font-bold text-purple-800">📦 Depósito: {vD.grandes}G</span>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-
-                                <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
-                                    <button 
-                                        onClick={() => setUbicacion('gondola')}
-                                        className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${ubicacion === 'gondola' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500'}`}
-                                    >
-                                        Góndola
-                                    </button>
-                                    <button 
-                                        onClick={() => setUbicacion('deposito')}
-                                        className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all ${ubicacion === 'deposito' ? 'bg-white shadow-sm text-purple-600' : 'text-gray-500'}`}
-                                    >
-                                        Depósito
-                                    </button>
-                                </div>
-
-                                <div className="space-y-4 mb-8 flex-1">
-                                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                        <label className="font-bold text-gray-700 text-lg">Cajas Grandes</label>
-                                        <input type="number" value={cantidades.grandes} onChange={(e) => setCantidades({...cantidades, grandes: e.target.value})} className="w-24 p-2 text-center font-bold text-xl border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" placeholder="0" />
+                            {saborSeleccionado && (
+                                <div className="bg-orange-50 border border-orange-100 p-3 rounded-xl mb-6">
+                                    <div className="text-xs font-bold text-orange-600 uppercase mb-1 flex items-center gap-1"><Info size={14}/> Stock actual registrado:</div>
+                                    <div className="text-sm font-semibold text-gray-700">
+                                        📍 Góndola: {parseInt(gondolaData[saborSeleccionado]?.grandes) || 0}G - {parseInt(gondolaData[saborSeleccionado]?.chicas) || 0}C
+                                        <br/>
+                                        📦 Depósito: {parseInt(depositoData[saborSeleccionado]?.grandes) || 0}G
                                     </div>
-                                    {ubicacion === 'gondola' && (
-                                        <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                            <label className="font-bold text-gray-700 text-lg">Cajas Chicas</label>
-                                            <input type="number" value={cantidades.chicas} onChange={(e) => setCantidades({...cantidades, chicas: e.target.value})} className="w-24 p-2 text-center font-bold text-xl border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" placeholder="0" />
-                                        </div>
-                                    )}
                                 </div>
+                            )}
 
-                                {mensajeUI && (
-                                    <div className="bg-red-50 text-red-600 font-bold p-3 rounded-xl mb-4 text-center border border-red-100 animate-pulse">
-                                        {mensajeUI}
-                                    </div>
-                                )}
-
-                                <button 
-                                    onClick={guardarStock}
-                                    className={`w-full py-4 rounded-2xl font-black text-white text-lg active:scale-95 transition-transform shadow-lg ${isSuma ? 'bg-green-500 shadow-green-200' : 'bg-red-500 shadow-red-200'}`}
-                                >
-                                    {isSuma ? 'GUARDAR ENTRADA' : 'CONFIRMAR RESTA'}
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Ubicación</label>
+                            <div className="flex gap-2 mb-6">
+                                <button onClick={() => setUbicacionSel('gondola')} className={`flex-1 p-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all ${ubicacionSel === 'gondola' ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>
+                                    📍 Góndola
+                                </button>
+                                <button onClick={() => setUbicacionSel('deposito')} className={`flex-1 p-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-all ${ubicacionSel === 'deposito' ? 'bg-purple-600 text-white shadow-md' : 'bg-gray-100 text-gray-500'}`}>
+                                    📦 Depósito
                                 </button>
                             </div>
-                        )}
+
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Cajas Grandes (240 sobres)</label>
+                            <input 
+                                type="number" 
+                                placeholder={modoAgregar ? "Ej. 1 (o -1 para restar)" : "Ej. 1"}
+                                value={ubicacionSel === 'gondola' ? cantGondola.grandes : cantDeposito.grandes}
+                                onChange={e => ubicacionSel === 'gondola' ? setCantGondola({...cantGondola, grandes: e.target.value}) : setCantDeposito({...cantDeposito, grandes: e.target.value})}
+                                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl mb-4 text-center font-black text-xl outline-none"
+                            />
+
+                            {ubicacionSel === 'gondola' && (
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">Cajas Chicas (10 sobres)</label>
+                                    <input 
+                                        type="number" 
+                                        placeholder={modoAgregar ? "Ej. 2 (o -2 para restar)" : "Ej. 2"}
+                                        value={cantGondola.chicas}
+                                        onChange={e => setCantGondola({...cantGondola, chicas: e.target.value})}
+                                        className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl mb-6 text-center font-black text-xl outline-none"
+                                    />
+                                </div>
+                            )}
+
+                            <button 
+                                onClick={guardarStock}
+                                disabled={!saborSeleccionado}
+                                className={`w-full p-4 rounded-xl font-black text-white text-lg shadow-md transition-transform active:scale-95 flex justify-center items-center gap-2 ${!saborSeleccionado ? 'bg-gray-300' : (modoAgregar ? 'bg-green-500' : 'bg-red-500')}`}
+                            >
+                                <Save size={24} /> {modoAgregar ? 'Guardar Ingreso' : 'Descontar Stock'}
+                            </button>
+                        </div>
                     </div>
                 );
             };
 
-            return (
-                <div className="flex flex-col h-screen overflow-hidden">
-                    <header className="bg-white shadow-sm px-4 py-3 flex justify-between items-center z-10">
+            const renderTotales = () => {
+                // Mostrar todos los sabores en los totales
+                const saboresAMostrar = saboresActivos;
+                
+                let granTotal = 0;
+
+                return (
+                    <div className="p-4 pb-28 animate-fade-in">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                            <h2 className="text-xl font-black text-gray-800 mb-2 flex items-center gap-2 border-b pb-4">
+                                <BarChart3 className="text-blue-500"/> Totales del Mes
+                            </h2>
+                            <div className="mt-4 space-y-1">
+                                {saboresAMostrar.length === 0 ? (
+                                    <p className="text-gray-400 text-center py-4">No hay datos.</p>
+                                ) : (
+                                    saboresAMostrar.map(sabor => {
+                                        const g = gondolaData[sabor] || {};
+                                        const d = depositoData[sabor] || {};
+                                        const total = sobresDesdeCajas(g.grandes, g.chicas) + sobresDesdeCajas(d.grandes, 0);
+                                        granTotal += total;
+
+                                        return (
+                                            <div key={sabor} className="border-b border-dashed border-gray-200 py-2">
+                                                <span className="font-bold text-gray-800 text-lg">
+                                                    {sabor}: &nbsp;&nbsp;&nbsp; <span className="font-black text-orange-600">{total} un.</span>
+                                                </span>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                            <div className="mt-6 pt-4 border-t-4 border-gray-800">
+                                <h3 className="font-black text-gray-800 text-xl text-right uppercase">
+                                    Total Sucursal: <span className="text-3xl text-orange-600">{granTotal} un.</span>
+                                </h3>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            if (isDummyConfig) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center animate-fade-in">
+                        <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full border-t-8 border-red-500">
+                            <div className="text-red-500 mb-4 flex justify-center"><AlertTriangle size={64} /></div>
+                            <h2 className="text-2xl font-black text-gray-800 mb-2">Faltan tus Credenciales</h2>
+                            <p className="text-gray-600 text-sm mb-4">
+                                El sistema detectó que aún estás usando las credenciales de prueba en el código (<code className="bg-gray-100 px-1 rounded text-red-500 font-mono">tu-proyecto</code>).
+                            </p>
+                            <p className="text-gray-600 text-sm font-medium">
+                                Por favor, abre el código y reemplaza el bloque <b>firebaseConfig</b> con los datos reales de tu base de datos de Firebase.
+                            </p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (loadError) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6 text-center animate-fade-in">
                         <div>
-                            <p className="text-xs text-gray-400 font-black uppercase tracking-widest">Sucursal</p>
-                            <h1 className="text-xl font-black text-orange-600 leading-none">{sucursal}</h1>
+                            <div className="text-red-500 mb-4 flex justify-center"><AlertTriangle size={48} /></div>
+                            <h2 className="text-xl font-bold text-gray-800 mb-2">Error de conexión</h2>
+                            <p className="text-gray-600 text-sm">No se pudo conectar a la base de datos.<br/>Verifica que hayas puesto tus datos de Firebase correctamente.</p>
                         </div>
-                        <div className="flex gap-2">
-                            <button onClick={() => setConfigOpen(true)} className="text-gray-500 p-2.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors">
-                                <Settings size={20} />
+                    </div>
+                );
+            }
+
+            if (!isFirebaseReady) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50 animate-fade-in">
+                        <div className="text-center">
+                            <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                            <h2 className="text-lg font-bold text-gray-700">Conectando...</h2>
+                        </div>
+                    </div>
+                );
+            }
+
+            // PANTALLA INICIAL DE SELECCIÓN DE SUCURSAL
+            if (!appIniciada) {
+                return (
+                    <div className="min-h-screen bg-orange-500 flex flex-col items-center justify-center p-6 animate-fade-in text-white selection:bg-orange-300">
+                        <Store size={72} className="mb-6 opacity-90" strokeWidth={1.5} />
+                        <h1 className="text-4xl font-black text-center tracking-tight mb-2">Stock Rinde Dos</h1>
+                        <p className="text-orange-100 text-lg text-center mb-12 font-medium">¿En qué sucursal vas a cargar hoy?</p>
+                        
+                        <div className="w-full max-w-sm space-y-4">
+                            <button 
+                                onClick={() => { setSucursal('Diarco'); setAppIniciada(true); }} 
+                                className="w-full bg-white text-blue-700 font-black text-2xl p-5 rounded-2xl shadow-xl hover:scale-105 transition-transform flex items-center justify-center gap-3 border-b-4 border-blue-200"
+                            >
+                                <Store size={28} /> Diarco
                             </button>
-                            <button onClick={() => setSucursal(null)} className="text-red-500 p-2.5 bg-red-50 hover:bg-red-100 rounded-full transition-colors">
-                                <LogOut size={20} />
+                            <button 
+                                onClick={() => { setSucursal('Maxiconsumo'); setAppIniciada(true); }} 
+                                className="w-full bg-white text-purple-700 font-black text-2xl p-5 rounded-2xl shadow-xl hover:scale-105 transition-transform flex items-center justify-center gap-3 border-b-4 border-purple-200"
+                            >
+                                <Store size={28} /> Maxiconsumo
                             </button>
                         </div>
-                    </header>
+                        <div className="mt-12 text-sm text-orange-200 font-medium">
+                            <p>Mes actual: {mesActual}</p>
+                        </div>
+                    </div>
+                );
+            }
 
-                    <main className="flex-1 overflow-y-auto bg-gray-50 pb-32">
-                        {vista === 'inicio' && renderInicio()}
-                        {vista === 'nuevo' && <FormularioStock modo="sumar" />}
-                        {vista === 'modificar' && <FormularioStock modo="restar" />}
-                        {vista === 'totales' && renderTotales()}
-                    </main>
+            return (
+                <div className="min-h-screen relative max-w-md mx-auto bg-gray-50 shadow-xl overflow-x-hidden">
+                    {/* Header Fijo */}
+                    <div className="bg-orange-500 pt-12 pb-6 px-6 rounded-b-[2rem] shadow-lg relative z-10">
+                        <div className="flex items-center gap-3 mb-6 text-white">
+                            <PackageSearch size={32} />
+                            <div>
+                                <h1 className="text-2xl font-black leading-none tracking-tight">Stock Rinde Dos</h1>
+                                <p className="text-orange-100 text-sm font-medium">{mesActual}</p>
+                            </div>
+                        </div>
 
-                    <nav className="fixed bottom-0 w-full bg-white border-t border-gray-200 flex justify-around pb-safe z-20 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
-                        <button onClick={() => setVista('inicio')} className={`flex flex-col items-center p-3 w-1/4 transition-colors ${vista === 'inicio' ? 'text-orange-500' : 'text-gray-400'}`}>
-                            <Home size={24} strokeWidth={vista === 'inicio' ? 2.5 : 2} />
+                        <div className="bg-white/20 p-1.5 rounded-xl flex items-center">
+                            <Store className="text-white ml-2" size={20}/>
+                            <select 
+                                value={sucursal} 
+                                onChange={(e) => setSucursal(e.target.value)}
+                                className="bg-transparent text-white font-bold w-full p-2 outline-none appearance-none cursor-pointer"
+                            >
+                                <option value="Diarco" className="text-gray-800">Diarco</option>
+                                <option value="Maxiconsumo" className="text-gray-800">Maxiconsumo</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="relative z-0">
+                        {tabActual === 'inicio' && renderInicio()}
+                        {tabActual === 'agregar' && renderCargar()}
+                        {tabActual === 'restar' && renderCargar()}
+                        {tabActual === 'totales' && renderTotales()}
+                    </div>
+
+                    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around p-2 pb-6 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)] z-40 max-w-md mx-auto">
+                        <button onClick={() => setTabActual('inicio')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${tabActual === 'inicio' ? 'text-orange-600 scale-110' : 'text-gray-400 hover:text-gray-600'}`}>
+                            <Home size={24} strokeWidth={tabActual==='inicio'?3:2} />
                             <span className="text-[10px] font-bold mt-1">Inicio</span>
                         </button>
-                        <button onClick={() => setVista('nuevo')} className={`flex flex-col items-center p-3 w-1/4 transition-colors ${vista === 'nuevo' ? 'text-green-500' : 'text-gray-400'}`}>
-                            <PlusCircle size={24} strokeWidth={vista === 'nuevo' ? 2.5 : 2} />
+                        <button onClick={() => setTabActual('agregar')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${tabActual === 'agregar' ? 'text-green-500 scale-110' : 'text-gray-400 hover:text-gray-600'}`}>
+                            <PlusCircle size={24} strokeWidth={tabActual==='agregar'?3:2} />
                             <span className="text-[10px] font-bold mt-1">Agregar</span>
                         </button>
-                        <button onClick={() => setVista('modificar')} className={`flex flex-col items-center p-3 w-1/4 transition-colors ${vista === 'modificar' ? 'text-red-500' : 'text-gray-400'}`}>
-                            <MinusCircle size={24} strokeWidth={vista === 'modificar' ? 2.5 : 2} />
+                        <button onClick={() => setTabActual('restar')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${tabActual === 'restar' ? 'text-red-500 scale-110' : 'text-gray-400 hover:text-gray-600'}`}>
+                            <MinusCircle size={24} strokeWidth={tabActual==='restar'?3:2} />
                             <span className="text-[10px] font-bold mt-1">Restar</span>
                         </button>
-                        <button onClick={() => setVista('totales')} className={`flex flex-col items-center p-3 w-1/4 transition-colors ${vista === 'totales' ? 'text-blue-500' : 'text-gray-400'}`}>
-                            <List size={24} strokeWidth={vista === 'totales' ? 2.5 : 2} />
+                        <button onClick={() => setTabActual('totales')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${tabActual === 'totales' ? 'text-blue-500 scale-110' : 'text-gray-400 hover:text-gray-600'}`}>
+                            <BarChart3 size={24} strokeWidth={tabActual==='totales'?3:2} />
                             <span className="text-[10px] font-bold mt-1">Totales</span>
                         </button>
-                    </nav>
+                    </div>
 
-                    {configOpen && <ModalSabores />}
+                    {mostrarAjustes && (
+                        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]">
+                                <div className="bg-gray-100 p-4 border-b flex justify-between items-center">
+                                    <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                                        <Settings size={20} className="text-gray-600"/> Ajustes
+                                    </h3>
+                                    <button onClick={() => setMostrarAjustes(false)} className="text-gray-500 hover:text-red-500"><X size={24} /></button>
+                                </div>
+                                <div className="p-5 overflow-y-auto">
+                                    <div className="mb-6 border-b pb-4">
+                                        <label className="block text-sm font-bold text-gray-700 mb-2">Nuevo sabor a la lista</label>
+                                        <div className="flex gap-2">
+                                            <input type="text" value={nuevoSabor} onChange={e => setNuevoSabor(e.target.value)} placeholder="Ej. Uva Mágica" className="flex-1 p-2 bg-gray-50 border border-gray-200 rounded-lg outline-none"/>
+                                            <button onClick={agregarSaborManual} className="bg-orange-500 text-white px-3 py-2 rounded-lg font-bold flex items-center"><Plus size={18}/></button>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-3">Lista Actual ({sucursal})</label>
+                                        <div className="space-y-2">
+                                            {saboresActivos.map(s => (
+                                                <div key={s} className="flex items-center gap-2 bg-gray-50 border border-gray-200 p-2 rounded-lg">
+                                                    {editandoSaborInfo === s ? (
+                                                        <div className="flex flex-1 gap-2">
+                                                            <input type="text" autoFocus value={nombreEditado} onChange={e => setNombreEditado(e.target.value)} className="flex-1 p-1 text-sm font-bold border rounded outline-none"/>
+                                                            <button onClick={guardarEdicionNombreSabor} className="bg-green-500 text-white p-1.5 rounded"><Save size={14}/></button>
+                                                            <button onClick={() => setEditandoSaborInfo(null)} className="bg-gray-300 text-gray-700 p-1.5 rounded"><X size={14}/></button>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <span className="flex-1 font-semibold text-sm text-gray-800 pl-2">{s}</span>
+                                                            <button onClick={() => { setEditandoSaborInfo(s); setNombreEditado(s); }} className="text-blue-500 p-1 bg-blue-50 rounded hover:bg-blue-100"><Edit2 size={14}/></button>
+                                                            <button onClick={() => eliminarSaborManual(s)} className="text-red-500 p-1 bg-red-50 rounded hover:bg-red-100"><Trash2 size={14}/></button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
 
-        const root = createRoot(document.getElementById('root'));
+        const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
+    
+    <style>
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        /* Esconder las flechitas de subir/bajar número en los inputs */
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+    </style>
 </body>
 </html>
