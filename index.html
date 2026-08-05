@@ -391,10 +391,6 @@
                                                             <label className="text-[10px] font-bold text-gray-500 uppercase">Grandes</label>
                                                             <input type="number" min="0" value={valDeposito.grandes} onChange={e => setValDeposito({...valDeposito, grandes: parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" />
                                                         </div>
-                                                        <div className="flex-1">
-                                                            <label className="text-[10px] font-bold text-gray-500 uppercase">Chicas</label>
-                                                            <input type="number" min="0" value={valDeposito.chicas} onChange={e => setValDeposito({...valDeposito, chicas: parseInt(e.target.value) || 0})} className="w-full p-2 text-center font-bold border-2 border-white rounded-lg outline-none" />
-                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -426,7 +422,7 @@
                                             <div className="bg-purple-50 p-3 rounded-xl w-[48%] text-center border border-purple-100 shadow-inner">
                                                 <span className="font-bold text-purple-700 block mb-1 text-xs uppercase tracking-wide">📦 Depósito</span>
                                                 <span className="font-black text-purple-900 text-[1.1rem]">
-                                                    {depositoVal.grandes}G - {depositoVal.chicas}C
+                                                    {depositoVal.grandes}G
                                                 </span>
                                             </div>
                                         </div>
@@ -500,7 +496,8 @@
                     }
                     
                     let cG = parseInt(cantidades.grandes) || 0;
-                    let cC = parseInt(cantidades.chicas) || 0;
+                    // Solo tomamos cajas chicas si está en Góndola
+                    let cC = ubicacion === 'gondola' ? (parseInt(cantidades.chicas) || 0) : 0;
 
                     if (cG === 0 && cC === 0) {
                         setMensajeUI("Ingresa una cantidad válida.");
@@ -606,7 +603,7 @@
                                             <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest block mb-1">Stock Actual Registrado</span>
                                             <div className="flex justify-between text-sm mt-1">
                                                 <span className="font-bold text-blue-800">📍 Góndola: {vG.grandes}G - {vG.chicas}C</span>
-                                                <span className="font-bold text-purple-800">📦 Depósito: {vD.grandes}G - {vD.chicas}C</span>
+                                                <span className="font-bold text-purple-800">📦 Depósito: {vD.grandes}G</span>
                                             </div>
                                         </div>
                                     );
@@ -632,10 +629,12 @@
                                         <label className="font-bold text-gray-700 text-lg">Cajas Grandes</label>
                                         <input type="number" value={cantidades.grandes} onChange={(e) => setCantidades({...cantidades, grandes: e.target.value})} className="w-24 p-2 text-center font-bold text-xl border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" placeholder="0" />
                                     </div>
-                                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                        <label className="font-bold text-gray-700 text-lg">Cajas Chicas</label>
-                                        <input type="number" value={cantidades.chicas} onChange={(e) => setCantidades({...cantidades, chicas: e.target.value})} className="w-24 p-2 text-center font-bold text-xl border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" placeholder="0" />
-                                    </div>
+                                    {ubicacion === 'gondola' && (
+                                        <div className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                            <label className="font-bold text-gray-700 text-lg">Cajas Chicas</label>
+                                            <input type="number" value={cantidades.chicas} onChange={(e) => setCantidades({...cantidades, chicas: e.target.value})} className="w-24 p-2 text-center font-bold text-xl border-2 border-gray-200 rounded-lg focus:outline-none focus:border-orange-500" placeholder="0" />
+                                        </div>
+                                    )}
                                 </div>
 
                                 {mensajeUI && (
