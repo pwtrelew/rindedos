@@ -106,12 +106,15 @@
             const mesActual = new Date().toISOString().slice(0, 7);
             const appId = "rindedos-app";
 
-            // Estados de navegación
+            // Estados de navegación y sucursales
+            const [listaSucursales, setListaSucursales] = useState(['Diarco', 'Maxiconsumo']);
             const [sucursal, setSucursal] = useState(localStorage.getItem('rindeDos_sucursal') || 'Diarco');
             const [appIniciada, setAppIniciada] = useState(false); // Controla la pantalla de bienvenida
+            const [agregandoSucursal, setAgregandoSucursal] = useState(false);
+            const [nuevaSucursal, setNuevaSucursal] = useState('');
             const [tabActual, setTabActual] = useState('inicio');
             
-            // Estados de datos (Aseguramos que siempre existan gondola y deposito para evitar crasheos)
+            // Estados de datos
             const [datosStock, setDatosStock] = useState({ gondola: {}, deposito: {} });
             const [saboresActivos, setSaboresActivos] = useState([]);
             
@@ -136,11 +139,11 @@
                 localStorage.setItem('rindeDos_sucursal', sucursal);
                 if (!db) return;
 
+                // Cargar datos de stock de la sucursal actual
                 const docRef = doc(db, 'artifacts', appId, 'public', 'data', sucursal, mesActual);
                 const unsub = onSnapshot(docRef, (docSnap) => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
-                        // Sanitizamos los datos para que nunca falte gondola o deposito
                         setDatosStock({
                             gondola: data.gondola || {},
                             deposito: data.deposito || {}
@@ -150,7 +153,8 @@
                     }
                 });
 
-                const configRef = doc(db, 'artifacts', appId, 'public', `config_sabores_${sucursal}`);
+                // Cargar lista de sabores activos
+                const configRef = doc(db, 'artifacts', appId, 'public', `config_sabores`);
                 const unsubConfig = onSnapshot(configRef, (docSnap) => {
                     if (docSnap.exists() && docSnap.data().lista) {
                         setSaboresActivos(docSnap.data().lista.sort((a,b) => a.localeCompare(b)));
@@ -161,15 +165,21 @@
                             "Naranja 1+1", "Naranja Banana", "Naranja Durazno", 
                             "Naranja Mango", "Pera", "Pomelo Rosado"
                         ];
-                        const filtrados = sucursal === 'Diarco' ? listaPorDefecto.filter(s => !s.includes('1+1')) : listaPorDefecto;
-                        setSaboresActivos(filtrados.sort((a,b) => a.localeCompare(b)));
+                        setSaboresActivos(listaPorDefecto.sort((a,b) => a.localeCompare(b)));
                     }
                 });
 
-                return () => { unsub(); unsubConfig(); };
+                // Cargar lista de sucursales
+                const sucursalesRef = doc(db, 'artifacts', appId, 'public', 'config_sucursales');
+                const unsubSucursales = onSnapshot(sucursalesRef, (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().lista) {
+                        setListaSucursales(docSnap.data().lista);
+                    }
+                });
+
+                return () => { unsub(); unsubConfig(); unsubSucursales(); };
             }, [sucursal, db]);
 
-            // Utilidades de Datos
             const gondolaData = datosStock.gondola || {};
             const depositoData = datosStock.deposito || {};
 
@@ -179,10 +189,22 @@
                 return (g * 240) + (c * 10);
             };
 
+            const agregarSucursalDB = async () => {
+                if (!nuevaSucursal.trim() || listaSucursales.includes(nuevaSucursal.trim())) return;
+                const nuevaLista = [...listaSucursales, nuevaSucursal.trim()];
+                setListaSucursales(nuevaLista);
+                if (db) {
+                    const sucursalesRef = doc(db, 'artifacts', appId, 'public', 'config_sucursales');
+                    await setDoc(sucursalesRef, { lista: nuevaLista });
+                }
+                setNuevaSucursal('');
+                setAgregandoSucursal(false);
+            };
+
             const guardarSaboresEnBD = async (nuevaLista) => {
                 setSaboresActivos(nuevaLista.sort((a,b) => a.localeCompare(b)));
                 if (!db) return;
-                const configRef = doc(db, 'artifacts', appId, 'public', `config_sabores_${sucursal}`);
+                const configRef = doc(db, 'artifacts', appId, 'public', `config_sabores`);
                 await setDoc(configRef, { lista: nuevaLista });
             };
 
@@ -265,12 +287,11 @@
             };
 
             const renderInicio = () => {
-                const todosLosSabores = [...new Set([...Object.keys(gondolaData), ...Object.keys(depositoData)])];
-                const saboresConStock = todosLosSabores
+                // Filtramos 1+1 si es Diarco, sino mostramos todos. Ordenamos alfabéticamente.
+                const saboresConStock = saboresActivos
                     .filter(sabor => {
-                        const g = gondolaData[sabor] || {};
-                        const d = depositoData[sabor] || {};
-                        return (parseInt(g.grandes) || 0) > 0 || (parseInt(g.chicas) || 0) > 0 || (parseInt(d.grandes) || 0) > 0;
+                        if (sucursal === 'Diarco' && sabor.includes('1+1')) return false;
+                        return true;
                     })
                     .sort((a, b) => a.localeCompare(b));
 
@@ -429,7 +450,11 @@
                                 className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl mb-4 font-semibold text-gray-800 outline-none"
                             >
                                 <option value="">Selecciona un sabor...</option>
-                                {saboresActivos.map(s => <option key={s} value={s}>{s}</option>)}
+                                {saboresActivos
+                                    .filter(s => !(sucursal === 'Diarco' && s.includes('1+1')))
+                                    .sort((a,b) => a.localeCompare(b))
+                                    .map(s => <option key={s} value={s}>{s}</option>)
+                                }
                             </select>
 
                             {saborSeleccionado && (
@@ -488,8 +513,9 @@
             };
 
             const renderTotales = () => {
-                // Mostrar todos los sabores en los totales
-                const saboresAMostrar = saboresActivos;
+                const saboresAMostrar = saboresActivos
+                    .filter(s => !(sucursal === 'Diarco' && s.includes('1+1')))
+                    .sort((a,b) => a.localeCompare(b));
                 
                 let granTotal = 0;
 
@@ -569,29 +595,49 @@
                 );
             }
 
-            // PANTALLA INICIAL DE SELECCIÓN DE SUCURSAL
             if (!appIniciada) {
                 return (
-                    <div className="min-h-screen bg-orange-500 flex flex-col items-center justify-center p-6 animate-fade-in text-white selection:bg-orange-300">
+                    <div className="min-h-screen bg-orange-500 flex flex-col items-center justify-center p-6 animate-fade-in text-white selection:bg-orange-300 overflow-y-auto">
                         <Store size={72} className="mb-6 opacity-90" strokeWidth={1.5} />
                         <h1 className="text-4xl font-black text-center tracking-tight mb-2">Stock Rinde Dos</h1>
-                        <p className="text-orange-100 text-lg text-center mb-12 font-medium">¿En qué sucursal vas a cargar hoy?</p>
+                        <p className="text-orange-100 text-lg text-center mb-10 font-medium">¿En qué sucursal vas a cargar hoy?</p>
                         
-                        <div className="w-full max-w-sm space-y-4">
-                            <button 
-                                onClick={() => { setSucursal('Diarco'); setAppIniciada(true); }} 
-                                className="w-full bg-white text-blue-700 font-black text-2xl p-5 rounded-2xl shadow-xl hover:scale-105 transition-transform flex items-center justify-center gap-3 border-b-4 border-blue-200"
-                            >
-                                <Store size={28} /> Diarco
-                            </button>
-                            <button 
-                                onClick={() => { setSucursal('Maxiconsumo'); setAppIniciada(true); }} 
-                                className="w-full bg-white text-purple-700 font-black text-2xl p-5 rounded-2xl shadow-xl hover:scale-105 transition-transform flex items-center justify-center gap-3 border-b-4 border-purple-200"
-                            >
-                                <Store size={28} /> Maxiconsumo
-                            </button>
+                        <div className="w-full max-w-sm space-y-4 mb-8">
+                            {listaSucursales.map(suc => (
+                                <button 
+                                    key={suc}
+                                    onClick={() => { setSucursal(suc); setAppIniciada(true); }} 
+                                    className="w-full bg-white text-orange-600 font-black text-2xl p-5 rounded-2xl shadow-xl hover:scale-105 transition-transform flex items-center justify-center gap-3 border-b-4 border-orange-200"
+                                >
+                                    <Store size={28} /> {suc}
+                                </button>
+                            ))}
+
+                            {agregandoSucursal ? (
+                                <div className="bg-white/20 p-4 rounded-2xl border border-white/40 animate-fade-in flex flex-col gap-3">
+                                    <input 
+                                        type="text" 
+                                        autoFocus
+                                        placeholder="Nombre (Ej. Yaguar)" 
+                                        value={nuevaSucursal}
+                                        onChange={e => setNuevaSucursal(e.target.value)}
+                                        className="w-full p-3 rounded-xl text-gray-800 font-bold outline-none"
+                                    />
+                                    <div className="flex gap-2">
+                                        <button onClick={agregarSucursalDB} className="flex-1 bg-green-500 text-white font-bold p-3 rounded-xl shadow-md">Guardar</button>
+                                        <button onClick={() => setAgregandoSucursal(false)} className="bg-red-400 text-white font-bold p-3 rounded-xl shadow-md"><X size={20}/></button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button 
+                                    onClick={() => setAgregandoSucursal(true)} 
+                                    className="w-full bg-orange-600 text-white font-bold text-lg p-4 rounded-2xl shadow-md hover:bg-orange-700 transition-colors flex items-center justify-center gap-2 border border-orange-400"
+                                >
+                                    <Plus size={20} /> Añadir nueva sucursal
+                                </button>
+                            )}
                         </div>
-                        <div className="mt-12 text-sm text-orange-200 font-medium">
+                        <div className="text-sm text-orange-200 font-medium">
                             <p>Mes actual: {mesActual}</p>
                         </div>
                     </div>
@@ -617,8 +663,9 @@
                                 onChange={(e) => setSucursal(e.target.value)}
                                 className="bg-transparent text-white font-bold w-full p-2 outline-none appearance-none cursor-pointer"
                             >
-                                <option value="Diarco" className="text-gray-800">Diarco</option>
-                                <option value="Maxiconsumo" className="text-gray-800">Maxiconsumo</option>
+                                {listaSucursales.map(suc => (
+                                    <option key={suc} value={suc} className="text-gray-800">{suc}</option>
+                                ))}
                             </select>
                         </div>
                     </div>
@@ -649,6 +696,7 @@
                         </button>
                     </div>
 
+                    {}
                     {mostrarAjustes && (
                         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
                             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]">
