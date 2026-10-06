@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rinde-dos-v7'; // Cambia este número para forzar actualización en los celulares
+const CACHE_NAME = 'rinde-dos-v8'; // Cambia este número para forzar actualización en los celulares
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
